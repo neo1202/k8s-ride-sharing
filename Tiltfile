@@ -8,24 +8,30 @@ k8s_yaml([
     'deploy/k8s/redis.yaml',
 ])
 
-# 2. 定義 Chat Service
-docker_build('chat-image', 'services/chat', # Image 名稱, Context 路徑
+# 2. 使用 docker_build_with_restart
+docker_build_with_restart(
+    'chat-image', 'services/chat',
     dockerfile='services/chat/Dockerfile',
+    
+    # 關鍵差異 A: 必須指定 entrypoint
+    # 這是告訴 Tilt：當服務重啟時，到底要執行哪個指令？
+    entrypoint=['go', 'run', 'main.go'],
+    
+    # 關鍵差異 B: live_update 裡面變乾淨了
+    # 不需要再寫 restart_container() 或 restart_process()
+    # 因為 docker_build_with_restart 自動會在 sync 結束後幫你重啟
     live_update=[
-        # 監聽 services/chat 資料夾，同步到容器內的 /app
         sync('services/chat', '/app'),
-        # 當 .go 檔案變動，執行 go run (簡單粗暴) 或 go build
-        # 這裡示範最簡單的：直接重啟容器讓 CMD ["go", "run", ...] 重新跑
-        restart_process() 
     ]
 )
 
 # 3. 定義 Auth Service
-docker_build('auth-image', 'services/auth',
+docker_build_with_restart(
+    'auth-image', 'services/auth',
     dockerfile='services/auth/Dockerfile',
+    entrypoint=['go', 'run', 'main.go'],
     live_update=[
         sync('services/auth', '/app'),
-        restart_process() 
     ]
 )
 
@@ -38,7 +44,7 @@ docker_build('frontend-image', 'frontend',
         # Vite 會自己偵測到檔案變了，然後更新瀏覽器
         sync('frontend/src', '/app/src'),
         sync('frontend/public', '/app/public'),
-    ],ㄜ
+    ],
     # 重要：因為 live_update 沒寫到 package.json
     # 所以一旦你改了 package.json，Tilt 就會自動退回到 "重新 build image"
     # 這樣就不用自己在容器裡跑 npm install 了
