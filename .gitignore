@@ -1,0 +1,65 @@
+# --- Go (Golang) ---
+
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go Workspace (本機開發用，通常不推上去以免影響協作者)
+go.work
+go.work.sum
+
+# 如果你有用 vendor 模式 (目前你用 module 模式，通常不需要這行，但加了保險)
+vendor/
+
+# --- Node.js / Frontend (React + Vite) ---
+# 依賴套件 (絕對不能推！)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build 產出的靜態檔案
+dist/
+build/
+
+# 本地測試覆蓋率報告
+coverage/
+
+# Vite 相關暫存
+.vite/
+
+# --- Tilt & Kubernetes ---
+# Tilt 擴充套件下載區 (因為你有用 ext://restart_process)
+tilt_modules/
+
+# 本地的 Tilt 狀態紀錄
+.tilt-dev/
+.tilt-*.json
+
+# 敏感的 Kubeconfig (通常不在專案內，但防呆一下)
+*.kubeconfig
+
+# --- Environment Variables (資安關鍵！) ---
+# 包含 API Key 或密碼的檔案絕對不能推
+.env
+.env.local
+.env.*.local
+
+# --- IDE / Editor ---
+# VS Code 設定 (如果你不想共享你的個人設定)
+.vscode/
+# JetBrains (GoLand/WebStorm)
+.idea/
+*.iml
+
+# --- OS System Files ---
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+desktop.ini
