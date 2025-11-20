@@ -1,5 +1,5 @@
 # 使用 Node.js 環境
-FROM node:18-alpine
+FROM node:20-alpine
 
 # 設定工作目錄
 WORKDIR /app
