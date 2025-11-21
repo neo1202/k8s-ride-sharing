@@ -40,22 +40,23 @@ function App() {
   const [currentRoom, setCurrentRoom] = useState<ChatRoomType | null>(null);
   // 1. 初始化：檢查 LocalStorage 登入狀態 & 撈房間
   useEffect(() => {
-    // 撈房間列表
-    fetch(`${API_URL}/api/rooms`)
+    const token = localStorage.getItem('chat_token');
+    fetch(`${API_URL}/api/rooms`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    })
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setUserRooms(data);
       })
       .catch((err) => console.error("Failed to fetch rooms", err));
 
-    // 檢查登入 (這裡簡化處理：如果有 Token，假設有效)
-    // 實務上應該拿 Token 去後端驗證有效性
+    // 檢查登入 (這裡簡化處理：如果有 Token，假設有效) 實務上應該拿 Token 去後端驗證有效性
     const storedToken = localStorage.getItem("chat_token");
     const storedUser = localStorage.getItem("chat_user_info");
     if (storedToken && storedUser) {
       setUser(JSON.parse(storedUser));
     }
-  }, []);
+  }, [API_URL]);
   // 登入邏輯 (保持不變)
   const handleLoginSuccess = async (credentialResponse: CredentialResponse) => {
     if (!credentialResponse.credential) return;
@@ -99,28 +100,38 @@ function App() {
   // --- 3. 建立房間邏輯 (ID 遞增) ---
   const handleCreateRoom = async () => {
     if (!newRoomName.trim()) return;
+    const token = localStorage.getItem('chat_token'); // 從 LocalStorage 拿 Token
+
+    if (!token) {
+        alert("請先登入！");
+        return;
+    }
 
     const newRoom = {
-      id: Date.now().toString(), // 用時間當 ID 比較簡單
+      id: Date.now().toString(),
       name: newRoomName,
-      isPinned: false,
+      isPinned: false
     };
 
     try {
-      // 打後端 API 存進 Postgres
-      const res = await fetch(`${API_URL}/api/rooms`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newRoom),
-      });
-
-      if (res.ok) {
-        // 成功後更新前端列表
-        setUserRooms([...userRooms, newRoom]);
-        setNewRoomName("");
-      }
-    } catch (e) {
-      alert(e);
+        // --- 修改這裡：加入 Authorization Header ---
+        const res = await fetch(`${API_URL}/api/rooms`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` // <--- 關鍵！帶上通行證
+            },
+            body: JSON.stringify(newRoom)
+        });
+        
+        if (res.ok) {
+            setUserRooms([...userRooms, newRoom]);
+            setNewRoomName("");
+        } else {
+            alert("建立失敗，可能權限不足");
+        }
+    } catch(e) {
+        alert(e);
     }
   };
 

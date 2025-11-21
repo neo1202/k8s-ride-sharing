@@ -8,36 +8,53 @@ import (
 	"log"
 	"net/http"
 	// "os"
+	"strings"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5" // 引入 JWT 套件
 	"github.com/gorilla/websocket"
-	_ "github.com/lib/pq" // Postgres Driver
+	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 )
 
+// --- 全域變數 ---
 var rdb *redis.Client
 var db *sql.DB
 var ctx = context.Background()
 
+// ⚠️ 重要：這個密鑰必須跟 Auth Service 的一模一樣！
+// 在正式環境中，這應該透過 ConfigMap/Secret 注入環境變數
+var jwtKey = []byte("my_secret_key_12345")
+
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
-
-// Key: WebSocket 連線, Value: 房間 ID
 var clients = make(map[*websocket.Conn]string)
 
+// --- 資料結構 ---
 type ChatMessage struct {
 	Username  string `json:"username"`
 	Content   string `json:"content"`
 	RoomID    string `json:"roomId"`
 	Timestamp string `json:"timestamp"`
+	// 資料庫存取時可能需要 UserID，這裡先簡化直接存 Username
 }
+
 type ChatRoom struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
+
+// JWT Claims 結構 (要跟 Auth Service 一樣)
+type Claims struct {
+	UserID string `json:"userId"`
+	Email  string `json:"email"`
+	Name   string `json:"name"`
+	jwt.RegisteredClaims
+}
+
+// --- 資料庫初始化 ---
 func initDB() {
-	// 連線字串：對應 deploy/k8s/postgres.yaml 的設定
-	// host=postgres (Service Name), user=user, password=password, dbname=chat_db
 	connStr := "host=postgres port=5432 user=user password=password dbname=chat_db sslmode=disable"
 	var err error
 	db, err = sql.Open("postgres", connStr)
@@ -45,61 +62,84 @@ func initDB() {
 		log.Fatal("Failed to connect to DB:", err)
 	}
 
-	// 測試連線 (重試機制，因為 Postgres 啟動比較慢)
-	for i := 0; i < 10; i++ {
-		if err = db.Ping(); err == nil {
-			break
-		}
-		log.Println("Waiting for Postgres...")
-		// time.Sleep(2 * time.Second) // 簡化省略
-	}
-
-	// 自動建立 Rooms 表格
+	// 1. 建立房間表
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS rooms (
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL
 	)`)
-	if err != nil {
-		log.Fatal("Failed to create table:", err)
-	}
-	log.Println("Connected to Postgres and table ensured.")
+	if err != nil { log.Fatal(err) }
+
+	// 2. 建立訊息表 (新增！)
+	// 我們存: id(自動跳號), room_id, sender_name, content, created_at
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS messages (
+		id SERIAL PRIMARY KEY,
+		room_id TEXT NOT NULL,
+		sender_name TEXT NOT NULL,
+		content TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`)
+	if err != nil { log.Fatal(err) }
+
+	log.Println("Connected to Postgres and tables ensured.")
 }
+
 func initRedis() {
-	// 請確認你的 redis 地址是否正確 (Tilt 內通常是 redis:6379)
-	rdb = redis.NewClient(&redis.Options{
-		Addr: "redis:6379",
-	})
+	rdb = redis.NewClient(&redis.Options{Addr: "redis:6379"})
 }
-func enableCORS(next http.HandlerFunc) http.HandlerFunc {
+
+// --- Middleware: JWT 驗證 ---
+// 這就是保護 API 的守門員
+func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
+		// 1. 從 Header 取得 Token
+		// 格式通常是: "Authorization: Bearer <token>"
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
 			return
 		}
+
+		// 去掉 "Bearer " 前綴
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		if tokenString == authHeader { // 沒找到 Bearer
+			http.Error(w, "Invalid token format", http.StatusUnauthorized)
+			return
+		}
+
+		// 2. 解析並驗證 Token
+		claims := &Claims{}
+		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+			return jwtKey, nil
+		})
+
+		if err != nil || !token.Valid {
+			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+			return
+		}
+
+		// 3. 驗證成功，放行！
+		// (進階做法是可以把 UserID 塞進 r.Context() 傳給下一個 handler，這裡先省略)
 		next(w, r)
 	}
 }
+
+// --- API Handlers ---
+
 func createRoomHandler(w http.ResponseWriter, r *http.Request) {
 	var room ChatRoom
 	if err := json.NewDecoder(r.Body).Decode(&room); err != nil {
 		http.Error(w, "Invalid body", http.StatusBadRequest)
 		return
 	}
-
-	// 寫入 Postgres
 	_, err := db.Exec("INSERT INTO rooms (id, name) VALUES ($1, $2)", room.ID, room.Name)
 	if err != nil {
 		http.Error(w, "Failed to create room: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
-	// 廣播給所有前端說有新房間了 (選用，這裡先回傳成功就好)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(room)
 }
+
 func getRoomsHandler(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.Query("SELECT id, name FROM rooms")
 	if err != nil {
@@ -111,42 +151,30 @@ func getRoomsHandler(w http.ResponseWriter, r *http.Request) {
 	var rooms []ChatRoom
 	for rows.Next() {
 		var room ChatRoom
-		if err := rows.Scan(&room.ID, &room.Name); err != nil {
-			continue
-		}
+		if err := rows.Scan(&room.ID, &room.Name); err != nil { continue }
 		rooms = append(rooms, room)
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(rooms)
 }
+
+// --- WebSocket ---
+
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("Error upgrading: %v", err)
-		return
-	}
+	if err != nil { return }
 	defer ws.Close()
 
 	roomID := r.URL.Query().Get("roomId")
-	if roomID == "" {
-		roomID = "general"
-	}
+	if roomID == "" { roomID = "general" }
 
 	clients[ws] = roomID
-	log.Printf("Client connected to room: %s", roomID)
-
-	// ==========================================
-	// 1. 使用 Redis Stream 讀取歷史訊息
+	
+	// 讀取歷史紀錄 (Redis Stream - 熱數據)
 	streamKey := fmt.Sprintf("stream:%s", roomID)
-
-	// 建立一個 Slice 來暫存所有歷史訊息
 	var historyMessages []ChatMessage
-
 	streams, err := rdb.XRevRangeN(ctx, streamKey, "+", "-", 50).Result()
 	if err == nil {
-		// streams 的順序是 [最新, 次新 ... 最舊]
-		// 我們要倒著塞進去，變成 [最舊 ... 次新, 最新]
 		for i := len(streams) - 1; i >= 0; i-- {
 			msgData := streams[i].Values["data"]
 			if jsonStr, ok := msgData.(string); ok {
@@ -155,58 +183,52 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				historyMessages = append(historyMessages, msg)
 			}
 		}
-		
-		// --- 關鍵修改 ---
-		// 如果有歷史訊息，就「一次性」發送整個陣列給前端
 		if len(historyMessages) > 0 {
 			ws.WriteJSON(historyMessages)
 		}
-	} else {
-		log.Printf("Error fetching history: %v", err)
 	}
 
-	// ==========================================
-	// 2. 處理即時訊息
-	// ==========================================
 	for {
 		var msg ChatMessage
 		err := ws.ReadJSON(&msg)
 		if err != nil {
-			log.Printf("Client disconnected: %v", err)
 			delete(clients, ws)
 			break
 		}
-		// 強制確保 RoomID 正確
 		msg.RoomID = roomID
 		jsonMsg, _ := json.Marshal(msg)
 
-		// A. 寫入 Redis Stream (作為歷史紀錄)
-		// 這樣可以確保訊息有順序且持久化
+		// A. 寫入 Redis Stream (熱數據)
 		rdb.XAdd(ctx, &redis.XAddArgs{
 			Stream: streamKey,
-			Values: map[string]interface{}{
-				"data": jsonMsg, // 把整包 JSON 存成一個欄位叫 "data"
-			},
+			Values: map[string]interface{}{"data": jsonMsg},
 		})
-		// 寫入 Postgres (冷數據 - 永久保存) <--- 這裡新增！
-		// 使用 Pub/Sub 做即時廣播 Stream 雖然也能讀，但 Pub/Sub 對於「即時推播」更輕量且延遲更低
+
+		// B. 寫入 Postgres (冷數據 - 永久保存) [NEW!]
+		// 我們開一個 goroutine 去寫 DB，避免卡住 WebSocket 的流暢度
+		go func(m ChatMessage) {
+			_, err := db.Exec(
+				"INSERT INTO messages (room_id, sender_name, content, created_at) VALUES ($1, $2, $3, $4)",
+				m.RoomID, m.Username, m.Content, time.Now(),
+			)
+			if err != nil {
+				log.Printf("Error saving to DB: %v", err)
+			}
+		}(msg)
+
+		// C. Pub/Sub (即時廣播)
 		rdb.Publish(ctx, "chat_channel", jsonMsg)
 	}
 }
 
-// 處理廣播 (這部分跟之前幾乎一樣)
 func handleMessages() {
 	pubsub := rdb.Subscribe(ctx, "chat_channel")
 	defer pubsub.Close()
-
 	ch := pubsub.Channel()
 
 	for msg := range ch {
 		var chatMsg ChatMessage
-		if err := json.Unmarshal([]byte(msg.Payload), &chatMsg); err != nil {
-			continue
-		}
-
+		if err := json.Unmarshal([]byte(msg.Payload), &chatMsg); err != nil { continue }
 		for client, clientRoomID := range clients {
 			if clientRoomID == chatMsg.RoomID {
 				client.WriteJSON(chatMsg)
@@ -217,11 +239,14 @@ func handleMessages() {
 
 func main() {
 	initRedis()
-	initDB()
+	initDB() // 建立表格
 	go handleMessages()
 
 	http.HandleFunc("/ws", handleConnections)
-	http.HandleFunc("/api/rooms", func(w http.ResponseWriter, r *http.Request) {
+
+	// 使用 authMiddleware 保護 API
+	// 只有帶正確 Token 的人才能呼叫這個 Handler
+	http.HandleFunc("/api/rooms", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "POST":
 			createRoomHandler(w, r)
@@ -230,7 +255,7 @@ func main() {
 		default:
         http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
     	}
-	})
+	}))
 
 	fmt.Println("Chat Service running on :8080")
 	http.ListenAndServe(":8080", nil)
