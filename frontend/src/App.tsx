@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import "./App.css";
 
@@ -28,23 +28,41 @@ const PINNED_ROOMS: ChatRoomType[] = [
 ];
 
 function App() {
+  const API_URL = import.meta.env.VITE_API_URL;
+
   const [user, setUser] = useState<User | null>(null);
-  
+
   // --- 2. 使用者建立的房間狀態 ---
   // 這裡預設是空的，ID 從 1 開始
   const [userRooms, setUserRooms] = useState<ChatRoomType[]>([]);
-  const [nextRoomId, setNextRoomId] = useState(1); // ID 計數器
-  
+
   const [newRoomName, setNewRoomName] = useState("");
   const [currentRoom, setCurrentRoom] = useState<ChatRoomType | null>(null);
+  // 1. 初始化：檢查 LocalStorage 登入狀態 & 撈房間
+  useEffect(() => {
+    // 撈房間列表
+    fetch(`${API_URL}/api/rooms`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setUserRooms(data);
+      })
+      .catch((err) => console.error("Failed to fetch rooms", err));
 
+    // 檢查登入 (這裡簡化處理：如果有 Token，假設有效)
+    // 實務上應該拿 Token 去後端驗證有效性
+    const storedToken = localStorage.getItem("chat_token");
+    const storedUser = localStorage.getItem("chat_user_info");
+    if (storedToken && storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+  }, []);
   // 登入邏輯 (保持不變)
   const handleLoginSuccess = async (credentialResponse: CredentialResponse) => {
     if (!credentialResponse.credential) return;
     const googleToken = credentialResponse.credential;
 
     try {
-      const response = await fetch("http://localhost:8081/auth/login", {
+      const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken: googleToken }),
@@ -53,16 +71,21 @@ function App() {
       if (!response.ok) throw new Error("Backend validation failed");
 
       const data = await response.json();
-      const userPicture = data.picture 
-        ? data.picture 
-        : `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name)}&background=random`;
+      const userPicture = data.picture
+        ? data.picture
+        : `https://ui-avatars.com/api/?name=${encodeURIComponent(
+            data.name
+          )}&background=random`;
 
-      setUser({
+      const userInfo = {
         name: data.name,
         picture: userPicture,
         email: data.email,
         userId: data.userId,
-      });
+      };
+      setUser(userInfo);
+      localStorage.setItem("chat_token", data.token);
+      localStorage.setItem("chat_user_info", JSON.stringify(userInfo));
     } catch (error) {
       console.error("Login failed:", error);
       alert("登入失敗");
@@ -74,18 +97,31 @@ function App() {
   };
 
   // --- 3. 建立房間邏輯 (ID 遞增) ---
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async () => {
     if (!newRoomName.trim()) return;
 
-    const newRoom: ChatRoomType = {
-      id: nextRoomId.toString(), // 將數字轉為字串作為 ID ( "1", "2", "3"...)
+    const newRoom = {
+      id: Date.now().toString(), // 用時間當 ID 比較簡單
       name: newRoomName,
       isPinned: false,
     };
 
-    setUserRooms([...userRooms, newRoom]);
-    setNextRoomId(nextRoomId + 1); // 計數器 +1
-    setNewRoomName("");
+    try {
+      // 打後端 API 存進 Postgres
+      const res = await fetch(`${API_URL}/api/rooms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newRoom),
+      });
+
+      if (res.ok) {
+        // 成功後更新前端列表
+        setUserRooms([...userRooms, newRoom]);
+        setNewRoomName("");
+      }
+    } catch (e) {
+      alert(e);
+    }
   };
 
   const enterRoom = (room: ChatRoomType) => {
@@ -98,10 +134,17 @@ function App() {
         <h1 className="text-2xl font-bold text-blue-600">Micro Chat</h1>
         {user && (
           <div className="flex items-center gap-3">
-            <img src={user.picture} alt={user.name} className="w-10 h-10 rounded-full border border-gray-200" />
+            <img
+              src={user.picture}
+              alt={user.name}
+              className="w-10 h-10 rounded-full border border-gray-200"
+            />
             <span className="font-medium">{user.name}</span>
-            <button 
-              onClick={() => { setUser(null); setCurrentRoom(null); }} 
+            <button
+              onClick={() => {
+                setUser(null);
+                setCurrentRoom(null);
+              }}
               className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 transition text-sm"
             >
               登出
@@ -114,7 +157,10 @@ function App() {
         {!user ? (
           <div className="flex flex-col items-center mt-20">
             <h2 className="text-xl mb-6 text-gray-600">請先登入以開始聊天</h2>
-            <GoogleLogin onSuccess={handleLoginSuccess} onError={handleLoginError} />
+            <GoogleLogin
+              onSuccess={handleLoginSuccess}
+              onError={handleLoginError}
+            />
           </div>
         ) : (
           <>
@@ -129,7 +175,6 @@ function App() {
             )}
 
             <div className="chat-lobby space-y-8">
-              
               {/* --- 區塊 A: 置頂官方頻道 --- */}
               <section>
                 <h3 className="text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
@@ -142,8 +187,12 @@ function App() {
                       onClick={() => enterRoom(room)}
                       className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 p-4 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition hover:-translate-y-1 flex items-center justify-between group"
                     >
-                      <span className="font-bold text-blue-800 text-lg">{room.name}</span>
-                      <span className="text-2xl group-hover:scale-110 transition">✨</span>
+                      <span className="font-bold text-blue-800 text-lg">
+                        {room.name}
+                      </span>
+                      <span className="text-2xl group-hover:scale-110 transition">
+                        ✨
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -161,7 +210,7 @@ function App() {
                   onChange={(e) => setNewRoomName(e.target.value)}
                   className="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 />
-                <button 
+                <button
                   onClick={handleCreateRoom}
                   className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition font-medium shadow-sm"
                 >
@@ -171,8 +220,10 @@ function App() {
 
               {/* --- 區塊 C: 使用者建立的房間列表 --- */}
               <section>
-                <h3 className="text-lg font-bold text-gray-700 mb-3">🌐 社群房間</h3>
-                
+                <h3 className="text-lg font-bold text-gray-700 mb-3">
+                  🌐 社群房間
+                </h3>
+
                 {userRooms.length === 0 ? (
                   <div className="text-center py-10 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
                     目前沒有其他房間，建立一個吧！
@@ -190,7 +241,9 @@ function App() {
                           <span className="bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded font-mono">
                             #{room.id}
                           </span>
-                          <span className="font-medium text-gray-800">{room.name}</span>
+                          <span className="font-medium text-gray-800">
+                            {room.name}
+                          </span>
                         </div>
                         <span className="text-gray-400">➡️</span>
                       </div>
@@ -198,7 +251,6 @@ function App() {
                   </div>
                 )}
               </section>
-
             </div>
           </>
         )}
