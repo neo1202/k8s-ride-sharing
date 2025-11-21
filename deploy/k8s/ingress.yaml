@@ -3,13 +3,12 @@ kind: Ingress
 metadata:
   name: main-ingress
   annotations:
+    # 必要的 CORS 設定
     nginx.ingress.kubernetes.io/enable-cors: "true"
-    # 這是必要的，為了讓 WebSocket 和 CORS 正常運作
-    nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "http://localhost:5173" # 允許前端跨域
+    nginx.ingress.kubernetes.io/cors-allow-origin: "http://localhost:5173"
     nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
-    # 增加 WebSocket 支援的 Timeout
+    # WebSocket 設定
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
 spec:
@@ -17,17 +16,17 @@ spec:
   rules:
   - http:
       paths:
-      # 1. Auth Service 的路徑
-      # 只要是 /auth 開頭的，都轉給 auth-service:8081
-      - path: /auth(/|$)(.*)
-        pathType: ImplementationSpecific
+      # 1. Auth Service
+      # 只要網址是 /auth 開頭，就丟給 auth-service 的 8081 port
+      - path: /auth
+        pathType: Prefix
         backend:
           service:
             name: auth-service
             port:
               number: 8081
       
-      # 2. Chat Service 的 WebSocket
+      # 2. Chat Service (WebSocket)
       - path: /ws
         pathType: Prefix
         backend:
@@ -36,9 +35,9 @@ spec:
             port:
               number: 8080
               
-      # 3. Chat Service 的 API (房間管理)
-      - path: /api(/|$)(.*)
-        pathType: ImplementationSpecific
+      # 3. Chat Service (API)
+      - path: /api
+        pathType: Prefix
         backend:
           service:
             name: chat-service
