@@ -2,18 +2,20 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	// "time" // 前端產生時間了，後端不需要 time 套件了
+	// "os"
 
 	"github.com/gorilla/websocket"
+	_ "github.com/lib/pq" // Postgres Driver
 	"github.com/redis/go-redis/v9"
 )
 
 var rdb *redis.Client
+var db *sql.DB
 var ctx = context.Background()
 
 var upgrader = websocket.Upgrader{
@@ -29,14 +31,95 @@ type ChatMessage struct {
 	RoomID    string `json:"roomId"`
 	Timestamp string `json:"timestamp"`
 }
+type ChatRoom struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+func initDB() {
+	// 連線字串：對應 deploy/k8s/postgres.yaml 的設定
+	// host=postgres (Service Name), user=user, password=password, dbname=chat_db
+	connStr := "host=postgres port=5432 user=user password=password dbname=chat_db sslmode=disable"
+	var err error
+	db, err = sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal("Failed to connect to DB:", err)
+	}
 
+	// 測試連線 (重試機制，因為 Postgres 啟動比較慢)
+	for i := 0; i < 10; i++ {
+		if err = db.Ping(); err == nil {
+			break
+		}
+		log.Println("Waiting for Postgres...")
+		// time.Sleep(2 * time.Second) // 簡化省略
+	}
+
+	// 自動建立 Rooms 表格
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS rooms (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL
+	)`)
+	if err != nil {
+		log.Fatal("Failed to create table:", err)
+	}
+	log.Println("Connected to Postgres and table ensured.")
+}
 func initRedis() {
 	// 請確認你的 redis 地址是否正確 (Tilt 內通常是 redis:6379)
 	rdb = redis.NewClient(&redis.Options{
 		Addr: "redis:6379",
 	})
 }
+func enableCORS(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next(w, r)
+	}
+}
+func createRoomHandler(w http.ResponseWriter, r *http.Request) {
+	var room ChatRoom
+	if err := json.NewDecoder(r.Body).Decode(&room); err != nil {
+		http.Error(w, "Invalid body", http.StatusBadRequest)
+		return
+	}
 
+	// 寫入 Postgres
+	_, err := db.Exec("INSERT INTO rooms (id, name) VALUES ($1, $2)", room.ID, room.Name)
+	if err != nil {
+		http.Error(w, "Failed to create room: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	// 廣播給所有前端說有新房間了 (選用，這裡先回傳成功就好)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(room)
+}
+func getRoomsHandler(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query("SELECT id, name FROM rooms")
+	if err != nil {
+		http.Error(w, "Failed to query rooms", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var rooms []ChatRoom
+	for rows.Next() {
+		var room ChatRoom
+		if err := rows.Scan(&room.ID, &room.Name); err != nil {
+			continue
+		}
+		rooms = append(rooms, room)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(rooms)
+}
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -93,25 +176,20 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			delete(clients, ws)
 			break
 		}
-
 		// 強制確保 RoomID 正確
 		msg.RoomID = roomID
-		// Timestamp 已經由前端產生，後端直接信任並轉發
-
 		jsonMsg, _ := json.Marshal(msg)
 
 		// A. 寫入 Redis Stream (作為歷史紀錄)
 		// 這樣可以確保訊息有順序且持久化
 		rdb.XAdd(ctx, &redis.XAddArgs{
 			Stream: streamKey,
-			// MaxLenApprox: 1000, // (選用) 自動限制長度，只留最近 1000 筆，避免無限膨脹
 			Values: map[string]interface{}{
 				"data": jsonMsg, // 把整包 JSON 存成一個欄位叫 "data"
 			},
 		})
-
-		// B. 使用 Pub/Sub 做即時廣播
-		// Stream 雖然也能讀，但 Pub/Sub 對於「即時推播」更輕量且延遲更低
+		// 寫入 Postgres (冷數據 - 永久保存) <--- 這裡新增！
+		// 使用 Pub/Sub 做即時廣播 Stream 雖然也能讀，但 Pub/Sub 對於「即時推播」更輕量且延遲更低
 		rdb.Publish(ctx, "chat_channel", jsonMsg)
 	}
 }
@@ -139,19 +217,21 @@ func handleMessages() {
 
 func main() {
 	initRedis()
+	initDB()
 	go handleMessages()
 
 	http.HandleFunc("/ws", handleConnections)
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "Chat Service Running (Redis Stream)")
+	http.HandleFunc("/api/rooms", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "POST":
+			createRoomHandler(w, r)
+		case "GET":
+			getRoomsHandler(w, r)
+		default:
+        http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+    	}
 	})
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	fmt.Printf("Chat Service starting on :%s...\n", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatal(err)
-	}
+	fmt.Println("Chat Service running on :8080")
+	http.ListenAndServe(":8080", nil)
 }
