@@ -16,6 +16,13 @@ spec:
         image: auth-image # 對應 Tiltfile
         ports:
         - containerPort: 8081 # 注意 Auth 用 8081
+        env:
+        # --- 修改這裡 ---
+        - name: GOOGLE_CLIENT_ID
+          valueFrom:
+            configMapKeyRef:
+              name: app-config      # 對應 ConfigMap 的 metadata.name
+              key: GOOGLE_CLIENT_ID # 對應 data 裡的 key
 ---
 apiVersion: v1
 kind: Service

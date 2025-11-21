@@ -2,6 +2,7 @@
 load('ext://restart_process', 'docker_build_with_restart')
 # 1. 載入 K8s 設定
 k8s_yaml([
+    'deploy/k8s/configmap.yaml',
     'deploy/k8s/auth.yaml',
     'deploy/k8s/chat.yaml',
     'deploy/k8s/frontend.yaml',
