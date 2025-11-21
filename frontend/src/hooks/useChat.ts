@@ -15,8 +15,14 @@ export const useChat = (roomId: string, username: string) => {
   useEffect(() => {
     // 這裡不用刻意先 setMessages([])，因為連線後的 0.1 秒內歷史訊息就會來覆蓋
     // 這樣可以減少一次不必要的 Render
+    // 自動判斷：如果是 http 就轉成 ws, https 就轉成 wss
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const apiHost = import.meta.env.VITE_API_URL.replace(/^http(s)?:\/\//, '');
+    const wsUrl = `${protocol}//${apiHost}/ws`;
 
-    const ws = new WebSocket(`ws://localhost:8080/ws?roomId=${roomId}`);
+    // 連線
+    const ws = new WebSocket(`${wsUrl}?roomId=${roomId}`);
+    // const ws = new WebSocket(`ws://localhost:8080/ws?roomId=${roomId}`);
     socketRef.current = ws;
 
     ws.onopen = () => {
