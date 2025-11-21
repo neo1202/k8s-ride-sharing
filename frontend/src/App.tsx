@@ -1,35 +1,73 @@
 import { useState } from "react";
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google"; // Use CredentialResponse from @react-oauth/google
-import { jwtDecode } from "jwt-decode";
+// import { jwtDecode } from "jwt-decode"; // 後端解析所以就不用了
 import "./App.css";
 
 interface User {
-  name: string;
-  picture: string;
-  email: string;
+    name: string;
+    picture: string; // 一串網址
+    email: string;
+    userId: string;
 }
 
 interface ChatRoom {
-  id: string;
-  name: string;
+    id: string;
+    name: string;
 }
 
 function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [rooms, setRooms] = useState<ChatRoom[]>([
-    { id: "1", name: "一般閒聊" },
-    { id: "2", name: "技術討論" },
-  ]);
-  const [newRoomName, setNewRoomName] = useState("");
+    const [user, setUser] = useState<User | null>(null);
+    const [rooms, setRooms] = useState<ChatRoom[]>([
+        { id: "1", name: "一般閒聊" },
+        { id: "2", name: "技術討論" },
+    ]);
+    const [newRoomName, setNewRoomName] = useState("");
 
-  // Use CredentialResponse from @react-oauth/google
-  const handleLoginSuccess = (credentialResponse: CredentialResponse) => {
-    if (credentialResponse.credential) {
-      const decoded = jwtDecode<User>(credentialResponse.credential);
-      console.log("Login Success:", decoded);
-      setUser(decoded);
-    }
-  };
+    // Use CredentialResponse from @react-oauth/google
+    const handleLoginSuccess = async (credentialResponse: CredentialResponse) => {
+        if (!credentialResponse.credential) {
+            console.log("No credential received");
+            return;
+        }
+        const googleToken = credentialResponse.credential;
+        try {
+            // 發送 POST 請求給 Auth Service (Go) 這裡是打 8081 port，也就是 Auth Service
+            const response = await fetch("http://localhost:8081/auth/login", {
+                method: "POST",
+                headers: {
+                "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                idToken: googleToken, // 把 Google 給的這張票，轉交給後端驗證
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error("Backend validation failed");
+            }
+
+            // 2. 後端驗證成功，回傳使用者資料
+            const data = await response.json();
+            console.log("Backend response:", data);
+            const userPicture = data.picture 
+                ? data.picture 
+                : `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name)}&background=random`;
+            setUser({
+                // name: data.name, 
+                name: data.email.split("@")[0], // 暫時用 email 前綴當名字
+                email: data.email,
+                userId: data.userId,
+                picture: userPicture,
+            });
+
+            // TODO: 未來這裡會把 data.appToken 存入 localStorage
+            // localStorage.setItem("chat_token", data.appToken);
+
+            } catch (error) {
+            console.error("Login failed:", error);
+            alert("登入失敗，後端驗證不通過！");
+        }
+    };
 
   const handleLoginError = () => {
     console.log("Login Failed");
