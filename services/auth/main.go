@@ -7,9 +7,21 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/api/idtoken"
 )
+
+// 定義 JWT 的密鑰 (正式環境應該從環境變數讀取)
+var jwtKey = []byte("my_secret_key_12345")
+// 定義 JWT 內容結構
+type Claims struct {
+	UserID string `json:"userId"`
+	Email  string `json:"email"`
+	Name   string `json:"name"`
+	jwt.RegisteredClaims
+}
 
 // 定義前端傳過來的資料結構, 這是從google那邊得到的原始的認證字串沒有解密過
 type LoginRequest struct {
@@ -22,7 +34,7 @@ type LoginResponse struct {
 	Email   string `json:"email"`
 	Name    string `json:"name"`   
 	Picture string `json:"picture"`
-	// 未來這裡會回傳我們自己的 JWT Token
+	Token   string `json:"token"` // 後端發的通行證
 }
 
 
@@ -49,7 +61,10 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
         http.Error(w, "Server configuration error", http.StatusInternalServerError) // 之後可刪除
         return
     }
-
+	if r.Method == http.MethodOptions { // 遇到有人要preflight, 先跟他說沒問題
+        w.WriteHeader(http.StatusOK)
+        return
+    }
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -78,12 +93,28 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	picture, _ := payload.Claims["picture"].(string)
 	email, _ := payload.Claims["email"].(string)
 	userID := payload.Subject
+	expirationTime := time.Now().Add(7 * 24 * time.Hour) // 7天後過期
+	claims := &Claims{
+		UserID: userID,
+		Email:  email,
+		Name:   name,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(jwtKey)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 	
 	log.Printf("User logged in: %s (%s)", email, userID)
 
 	// 4. 回傳結果給前端
 	resp := LoginResponse{
 		Message: "Login Successful via Auth Service!",
+		Token:   tokenString,
 		UserID:  userID,
 		Email:   email,
 		Name:    name,    
@@ -95,7 +126,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/auth/login", enableCORS(loginHandler))
+	http.HandleFunc("/auth/login", loginHandler)
 
 	fmt.Println("Auth Service running on :8081")
 	// 注意：Auth Service 我們在 k8s yaml 裡設定是 8081 port
