@@ -1,90 +1,78 @@
 import { useState, useEffect } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
-// import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import "./App.css";
-
-// 引入你的 ChatRoom 元件
 import { ChatRoom } from "./components/ChatRoom";
 
-// --- 型別定義 ---
+const API_URL = import.meta.env.VITE_API_URL;
+
 interface User {
   name: string;
   picture: string;
   email: string;
   userId: string;
+  role: "driver" | "passenger"; // 新增 Role
 }
 
-interface ChatRoomType {
+interface Ride {
   id: string;
-  name: string;
-  isPinned?: boolean; // 用來區分是不是置頂房間 (可以用來給不同的 CSS 樣式)
+  driverId: string;
+  driverName: string;
+  origin: string;
+  destination: string;
+  departureTime: string;
+  maxPassengers: number;
+  currentPassengers: number;
+  status: string;
 }
-
-// --- 1. 定義三個永遠置頂的房間 ---
-// 這些房間的 ID 是固定的字串，方便後端辨識或做權限控管
-const PINNED_ROOMS: ChatRoomType[] = [
-  { id: "announcement", name: "📢 公告", isPinned: true },
-  { id: "general", name: "💬 留言區", isPinned: true },
-  { id: "leaderboard", name: "🏆 積分榜", isPinned: true },
-];
 
 function App() {
-  const API_URL = import.meta.env.VITE_API_URL;
   const [user, setUser] = useState<User | null>(null);
-  const [userRooms, setUserRooms] = useState<ChatRoomType[]>([]);
-  const [newRoomName, setNewRoomName] = useState("");
-  const [currentRoom, setCurrentRoom] = useState<ChatRoomType | null>(null);
-  // 1. 初始化：檢查 LocalStorage 登入狀態 & 撈房間
-  useEffect(() => {
-    const token = localStorage.getItem("chat_token");
-    fetch(`${API_URL}/api/rooms`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setUserRooms(data);
-      })
-      .catch((err) => console.error("Failed to fetch rooms", err));
+  const [rides, setRides] = useState<Ride[]>([]);
+  const [currentRide, setCurrentRide] = useState<Ride | null>(null);
 
-    // 檢查登入 (這裡簡化處理：如果有 Token，假設有效) 實務上應該拿 Token 去後端驗證有效性
-    const storedToken = localStorage.getItem("chat_token");
+  // 建立旅程表單狀態
+  const [formData, setFormData] = useState({
+    origin: "",
+    destination: "",
+    time: "",
+    maxPassengers: 3,
+  });
+
+  // 初始化
+  useEffect(() => {
+    fetchRides();
     const storedUser = localStorage.getItem("chat_user_info");
-    if (storedToken && storedUser) {
+    if (storedUser) {
       setUser(JSON.parse(storedUser));
     }
-  }, [API_URL]);
+  }, []);
+
+  const fetchRides = () => {
+    fetch(`${API_URL}/api/rides`) // 後端現在回傳的是 Rides
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setRides(data);
+      })
+      .catch(console.error);
+  };
+
   const login = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
-      console.log("Google Access Token:", tokenResponse.access_token);
-
       try {
-        // 我們把 Access Token 丟給後端
-        // 後端會拿這個 Token 去跟 Google 換取 User Profile
         const response = await fetch(`${API_URL}/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            accessToken: tokenResponse.access_token, // 注意：這裡改名了
-          }),
+          body: JSON.stringify({ accessToken: tokenResponse.access_token }),
         });
-
-        if (!response.ok) throw new Error("Backend validation failed");
-
+        if (!response.ok) throw new Error("Login failed");
         const data = await response.json();
 
-        // 因為改用 Access Token 換資料，Google 幾乎保證會回傳 picture
-        // 但我們還是保留 UI Avatars 當保底
-        const userPicture = data.picture
-          ? data.picture
-          : `https://ui-avatars.com/api/?name=${encodeURIComponent(
-              data.name
-            )}&background=random`;
-
-        const userInfo = {
+        const userInfo: User = {
           name: data.name,
-          picture: userPicture,
+          picture: data.picture,
           email: data.email,
           userId: data.userId,
+          role: data.role as "driver" | "passenger",
         };
 
         setUser(userInfo);
@@ -95,185 +83,313 @@ function App() {
         alert("登入失敗");
       }
     },
-    onError: () => console.log("Login Failed"),
   });
 
-  // --- 3. 建立房間邏輯 (ID 遞增) ---
-  const handleCreateRoom = async () => {
-    if (!newRoomName.trim()) return;
-    const token = localStorage.getItem("chat_token"); // 從 LocalStorage 拿 Token
+  const handleCreateRide = async () => {
+    const token = localStorage.getItem("chat_token");
+    if (!token) return;
 
-    if (!token) {
-      alert("請先登入！");
+    // 簡單檢查
+    if (!formData.origin || !formData.destination) {
+      alert("請輸入起點和終點");
       return;
     }
 
-    const newRoom = {
-      id: Date.now().toString(),
-      name: newRoomName,
-      isPinned: false,
+    // 轉換時間格式 RFC3339
+    const departureTime = new Date(formData.time).toISOString();
+
+    const newRide = {
+      id: Date.now().toString(), // 暫時用時間當 ID
+      driverId: user?.userId,
+      driverName: user?.name,
+      origin: formData.origin,
+      destination: formData.destination,
+      departureTime: departureTime,
+      maxPassengers: Number(formData.maxPassengers),
+      currentPassengers: 0,
+      status: "open",
     };
 
     try {
-      // --- 修改這裡：加入 Authorization Header ---
-      const res = await fetch(`${API_URL}/api/rooms`, {
+      const res = await fetch(`${API_URL}/api/rides`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`, // <--- 關鍵！帶上通行證
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(newRoom),
+        body: JSON.stringify(newRide),
       });
 
       if (res.ok) {
-        setUserRooms([...userRooms, newRoom]);
-        setNewRoomName("");
+        alert("旅程建立成功！");
+        setFormData({
+          origin: "",
+          destination: "",
+          time: "",
+          maxPassengers: 3,
+        });
+        fetchRides();
       } else {
-        alert("建立失敗，可能權限不足");
+        alert("建立失敗");
       }
     } catch (e) {
       alert(e);
     }
   };
 
-  const enterRoom = (room: ChatRoomType) => {
-    setCurrentRoom(room);
+  // 切換角色 (實際應用應該打 API 更新 DB，這裡先做前端切換效果)
+  const switchRole = (newRole: "driver" | "passenger") => {
+    if (user) {
+      const updatedUser = { ...user, role: newRole };
+      setUser(updatedUser);
+      localStorage.setItem("chat_user_info", JSON.stringify(updatedUser));
+      // TODO: 打 API 同步到後端 /api/users/role
+    }
   };
 
   return (
-    <div className="App max-w-5xl mx-auto p-4 font-sans text-gray-800">
-      <header className="flex justify-between items-center border-b pb-4 mb-6">
-        <h1 className="text-2xl font-bold text-blue-600">Micro Chat</h1>
-        {user && (
-          <div className="flex items-center gap-3">
-            <img
-              src={user.picture}
-              alt={user.name}
-              className="w-10 h-10 rounded-full border border-gray-200"
-            />
-            <span className="font-medium">{user.name}</span>
-            <button
-              onClick={() => {
-                setUser(null);
-                setCurrentRoom(null);
-              }}
-              className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300 transition text-sm"
-            >
-              登出
-            </button>
+    <div className="App min-h-screen bg-gray-50 text-gray-800 font-sans">
+      {/* Header */}
+      <header className="bg-white shadow-sm sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🚖</span>
+            <h1 className="text-xl font-bold text-gray-800 tracking-tight">
+              RideShare Chat
+            </h1>
           </div>
-        )}
+
+          {user ? (
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 bg-gray-100 rounded-full pl-1 pr-3 py-1">
+                <img
+                  src={user.picture}
+                  className="w-8 h-8 rounded-full"
+                  alt="avatar"
+                />
+                <span className="text-sm font-medium">{user.name}</span>
+              </div>
+              <button
+                onClick={() => {
+                  setUser(null);
+                  localStorage.clear();
+                }}
+                className="text-sm text-gray-500 hover:text-red-500"
+              >
+                登出
+              </button>
+            </div>
+          ) : null}
+        </div>
       </header>
 
-      <main>
+      <main className="max-w-5xl mx-auto p-4 mt-6">
         {!user ? (
-          <div className="flex flex-col items-center mt-20">
-            <h2 className="text-xl mb-6 text-gray-600">請先登入以開始聊天</h2>
-            <button
-              onClick={() => login()}
-              className="flex items-center gap-3 bg-white text-gray-700 border border-gray-300 px-6 py-3 rounded-lg font-bold hover:bg-gray-50 hover:shadow transition active:scale-95"
-            >
-              <img
-                src="https://www.svgrepo.com/show/475656/google-color.svg"
-                className="w-6 h-6"
-                alt="Google"
-              />
-              使用 Google 帳號登入
-            </button>
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="bg-white p-8 rounded-2xl shadow-lg text-center max-w-md w-full">
+              <h2 className="text-2xl font-bold mb-2">歡迎加入共乘平台</h2>
+              <p className="text-gray-500 mb-8">
+                尋找你的下一趟旅程，或是分享你的座位
+              </p>
+              <button
+                onClick={() => login()}
+                className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition flex justify-center items-center gap-2"
+              >
+                <img
+                  src="https://www.svgrepo.com/show/475656/google-color.svg"
+                  className="w-5 h-5 bg-white rounded-full"
+                />
+                使用 Google 登入
+              </button>
+            </div>
           </div>
         ) : (
-          <>
-            {/* 聊天室視窗 (彈出式) */}
-            {currentRoom && (
-              <ChatRoom
-                roomId={currentRoom.id}
-                roomName={currentRoom.name}
-                username={user.name}
-                onClose={() => setCurrentRoom(null)}
-              />
-            )}
-
-            <div className="chat-lobby space-y-8">
-              {/* --- 區塊 A: 置頂官方頻道 --- */}
-              <section>
-                <h3 className="text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
-                  📌 官方頻道
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* 左側：控制面板 */}
+            <div className="space-y-6">
+              {/* 角色切換 */}
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                  當前身份
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {PINNED_ROOMS.map((room) => (
-                    <div
-                      key={room.id}
-                      onClick={() => enterRoom(room)}
-                      className="bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-100 p-4 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition hover:-translate-y-1 flex items-center justify-between group"
-                    >
-                      <span className="font-bold text-blue-800 text-lg">
-                        {room.name}
-                      </span>
-                      <span className="text-2xl group-hover:scale-110 transition">
-                        ✨
-                      </span>
-                    </div>
-                  ))}
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                  <button
+                    onClick={() => switchRole("passenger")}
+                    className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
+                      user.role === "passenger"
+                        ? "bg-white shadow text-blue-600"
+                        : "text-gray-500"
+                    }`}
+                  >
+                    我是乘客 🙋‍♂️
+                  </button>
+                  <button
+                    onClick={() => switchRole("driver")}
+                    className={`flex-1 py-2 rounded-md text-sm font-medium transition ${
+                      user.role === "driver"
+                        ? "bg-white shadow text-green-600"
+                        : "text-gray-500"
+                    }`}
+                  >
+                    我是司機 🚗
+                  </button>
                 </div>
-              </section>
+              </div>
 
-              <hr className="border-gray-100" />
-
-              {/* --- 區塊 B: 建立新房間 --- */}
-              <section className="flex gap-3 bg-gray-50 p-4 rounded-lg items-center">
-                <span className="text-gray-500 font-medium">創建新房間：</span>
-                <input
-                  type="text"
-                  placeholder="輸入房間名稱 (例如：週末打球)"
-                  value={newRoomName}
-                  onChange={(e) => setNewRoomName(e.target.value)}
-                  className="flex-1 border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-                <button
-                  onClick={handleCreateRoom}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition font-medium shadow-sm"
-                >
-                  ＋ 建立
-                </button>
-              </section>
-
-              {/* --- 區塊 C: 使用者建立的房間列表 --- */}
-              <section>
-                <h3 className="text-lg font-bold text-gray-700 mb-3">
-                  🌐 社群房間
-                </h3>
-
-                {userRooms.length === 0 ? (
-                  <div className="text-center py-10 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
-                    目前沒有其他房間，建立一個吧！
+              {/* 建立旅程 (只有司機可見) */}
+              {user.role === "driver" && (
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                  <h3 className="text-lg font-bold mb-4 text-gray-800">
+                    開啟新旅程
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <input
+                        placeholder="起點 (例如: 內湖)"
+                        className="w-1/2 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm"
+                        value={formData.origin}
+                        onChange={(e) =>
+                          setFormData({ ...formData, origin: e.target.value })
+                        }
+                      />
+                      <span className="text-gray-400 pt-2">➜</span>
+                      <input
+                        placeholder="終點 (例如: 新竹)"
+                        className="w-1/2 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm"
+                        value={formData.destination}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            destination: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <input
+                      type="datetime-local"
+                      className="w-full bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm text-gray-500"
+                      value={formData.time}
+                      onChange={(e) =>
+                        setFormData({ ...formData, time: e.target.value })
+                      }
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-500">最大乘客數</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="6"
+                        className="w-16 bg-gray-50 border border-gray-200 rounded px-2 py-1 text-center"
+                        value={formData.maxPassengers}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            maxPassengers: parseInt(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <button
+                      onClick={handleCreateRide}
+                      className="w-full bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 transition mt-2"
+                    >
+                      發布旅程
+                    </button>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {userRooms.map((room) => (
-                      <div
-                        key={room.id}
-                        onClick={() => enterRoom(room)}
-                        className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:shadow-md cursor-pointer transition flex justify-between items-center hover:border-blue-300"
-                      >
-                        <div className="flex items-center gap-3">
-                          {/* 顯示房間 ID */}
-                          <span className="bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded font-mono">
-                            #{room.id}
+                </div>
+              )}
+            </div>
+
+            {/* 右側：旅程列表 */}
+            <div className="lg:col-span-2">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <span>🛣️</span>
+                現有旅程
+                <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full">
+                  {rides.length}
+                </span>
+              </h3>
+
+              <div className="grid gap-4">
+                {rides.map((ride) => (
+                  <div
+                    key={ride.id}
+                    className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition group"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-bold text-lg text-gray-800">
+                            {ride.origin}
                           </span>
-                          <span className="font-medium text-gray-800">
-                            {room.name}
+                          <span className="text-gray-300">➜</span>
+                          <span className="font-bold text-lg text-gray-800">
+                            {ride.destination}
                           </span>
                         </div>
-                        <span className="text-gray-400">➡️</span>
+                        <div className="flex items-center gap-4 text-sm text-gray-500">
+                          <span className="flex items-center gap-1">
+                            📅 {new Date(ride.departureTime).toLocaleString()}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            🚗 {ride.driverName}
+                          </span>
+                        </div>
                       </div>
-                    ))}
+                      <button
+                        onClick={() => setCurrentRide(ride)}
+                        className="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg font-bold text-sm group-hover:bg-blue-600 group-hover:text-white transition"
+                      >
+                        {user.role === "driver" && user.userId === ride.driverId
+                          ? "進入聊天室"
+                          : "加入旅程"}
+                      </button>
+                    </div>
+
+                    {/* 進度條 */}
+                    <div className="mt-4">
+                      <div className="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>乘客</span>
+                        <span>
+                          {ride.currentPassengers} / {ride.maxPassengers} 人
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${
+                              (ride.currentPassengers / ride.maxPassengers) *
+                              100
+                            }%`,
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {rides.length === 0 && (
+                  <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
+                    目前沒有旅程，司機快來發布吧！
                   </div>
                 )}
-              </section>
+              </div>
             </div>
-          </>
+          </div>
         )}
       </main>
+
+      {/* 聊天室 (彈出視窗) */}
+      {currentRide && (
+        <ChatRoom
+          roomId={currentRide.id}
+          roomName={`${currentRide.origin} ➜ ${currentRide.destination}`}
+          username={user!.name}
+          userId={user!.userId}
+          onClose={() => setCurrentRide(null)}
+        />
+      )}
     </div>
   );
 }
