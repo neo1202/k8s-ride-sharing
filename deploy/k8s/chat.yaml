@@ -17,6 +17,17 @@ spec:
         image: chat-image  # 對應 Tiltfile 裡的 docker_build 第一個參數
         ports:
         - containerPort: 8080
+        env:
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secret
+              key: JWT_SECRET
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secret
+              key: POSTGRES_PASSWORD
 ---
 apiVersion: v1
 kind: Service

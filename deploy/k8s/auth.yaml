@@ -17,7 +17,16 @@ spec:
         ports:
         - containerPort: 8081 # 注意 Auth 用 8081
         env:
-        # --- 修改這裡 ---
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secret
+              key: JWT_SECRET
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secret
+              key: POSTGRES_PASSWORD
         - name: GOOGLE_CLIENT_ID
           valueFrom:
             configMapKeyRef:
