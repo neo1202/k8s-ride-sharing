@@ -39,6 +39,9 @@ type Claims struct {
 	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
+type JoinRideRequest struct {
+	RideID string `json:"rideId"`
+}
 
 // --- 初始化 Redis ---
 func initRedis() {
@@ -132,6 +135,36 @@ func getRidesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(rides)
+}
+func joinRideHandler(w http.ResponseWriter, r *http.Request) {
+	// 1. 解析 Request Body
+	var req JoinRideRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid body", http.StatusBadRequest)
+		return
+	}
+
+	// 2. 從 JWT 取得 UserID (Passenger)
+	authHeader := r.Header.Get("Authorization")
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	claims := &Claims{}
+	// 這裡可以直接 parse，因為 middleware 已經驗證過簽名了
+	jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		return jwtKey, nil
+	})
+
+	// 3. 呼叫 DB
+	if err := db.JoinRide(req.RideID, claims.UserID); err != nil {
+		if err.Error() == "ride is full" {
+			http.Error(w, "Ride is full", http.StatusConflict)
+		} else {
+			http.Error(w, "Failed to join ride: "+err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message": "Joined successfully"}`))
 }
 
 // --- WebSocket ---
@@ -228,18 +261,39 @@ func handleMessages() {
 		}
 	}
 }
-
+func getMyRidesHandler(w http.ResponseWriter, r *http.Request) {
+	// 從 Header 解析 UserID (這段邏輯跟 createRide 一樣，建議抽成 helper)
+	authHeader := r.Header.Get("Authorization")
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	claims := &Claims{}
+	jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) { return jwtKey, nil })
+	
+	rides, err := db.GetMyRides(claims.UserID)
+	if err != nil {
+		http.Error(w, "Query failed", http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(rides)
+}
 func main() {
 	initRedis()
-
-	// 初始化 DB (建立表格)
-	// 這裡呼叫的是 db package 的 Init 函式
 	db.Init()
 
 	go handleMessages()
 
 	http.HandleFunc("/ws", handleConnections)
-
+	http.HandleFunc("/api/rides/mine", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			getMyRidesHandler(w, r)
+		}
+	}))
+	http.HandleFunc("/api/rides/join", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+        if r.Method == "POST" {
+            joinRideHandler(w, r)
+        } else {
+            http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+        }
+    }))
 	http.HandleFunc("/api/rides", func(w http.ResponseWriter, r *http.Request) {
 		// 1. 處理 CORS Preflight (必要！)
 		if r.Method == http.MethodOptions {
@@ -255,8 +309,6 @@ func main() {
 
 		// 3. 如果是 POST (建立旅程)，才需要驗證 Token
 		if r.Method == "POST" {
-			// 我們手動呼叫 authMiddleware 來包裝 createRideHandler
-			// 這裡有點技巧：我們把 createRideHandler 變成 HandlerFunc 傳進去，然後立刻執行 ServeHTTP
 			authMiddleware(createRideHandler).ServeHTTP(w, r)
 			return
 		}

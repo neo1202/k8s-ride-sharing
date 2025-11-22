@@ -84,19 +84,6 @@ func CreateRide(ride types.Ride) error {
 	return err
 }
 
-// 加入旅程 (乘客)
-func JoinRide(rideID, passengerID string) error {
-	// 1. 先檢查滿了沒 (這裡簡化，嚴謹要做 Transaction)
-	// 2. 插入關聯表
-	_, err := DB.Exec(`
-		INSERT INTO ride_participants (ride_id, passenger_id)
-		VALUES ($1, $2)
-		ON CONFLICT DO NOTHING`, // 避免重複加入報錯
-		rideID, passengerID,
-	)
-	return err
-}
-
 func GetRides() ([]types.Ride, error) {
 	// 1. 修改 SQL: 明確選取 driver_id, status 等所有欄位
 	// COALESCE 是為了防止資料庫有 NULL 導致 Go 崩潰
@@ -165,4 +152,56 @@ func GetUserInfo(userID string) (types.User, error) {
 	// 因為聊天室只需要名字和照片
 	err := DB.QueryRow("SELECT id, name, picture FROM users WHERE id = $1", userID).Scan(&u.ID, &u.Name, &u.Picture)
 	return u, err
+}
+// 取得「我參與的」或「我駕駛的」旅程
+func GetMyRides(userID string) ([]types.Ride, error) {
+	// 邏輯：我是司機 OR 我在乘客名單裡
+	rows, err := DB.Query(`
+		SELECT DISTINCT 
+			r.id, r.driver_id, COALESCE(r.driver_name, 'Unknown'), r.origin, r.destination, 
+			r.departure_time, r.max_passengers, COALESCE(r.status, 'open'),
+			(SELECT COUNT(*) FROM ride_participants p2 WHERE p2.ride_id = r.id) as current_passengers
+		FROM rides r
+		LEFT JOIN ride_participants p ON r.id = p.ride_id
+		WHERE r.driver_id = $1 OR p.passenger_id = $1
+		ORDER BY r.departure_time DESC
+	`, userID)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	rides := make([]types.Ride, 0)
+	for rows.Next() {
+		var r types.Ride
+		if err := rows.Scan(&r.ID, &r.DriverID, &r.DriverName, &r.Origin, &r.Destination, &r.DepartureTime, &r.MaxPassengers, &r.Status, &r.CurrentPassengers); err != nil {
+			continue
+		}
+		rides = append(rides, r)
+	}
+	return rides, nil
+}
+func JoinRide(rideID, passengerID string) error {
+	// 1. 檢查旅程是否存在以及人數是否已滿
+	var maxPassengers, currentPassengers int
+	err := DB.QueryRow(`
+		SELECT max_passengers,
+		(SELECT COUNT(*) FROM ride_participants WHERE ride_id = $1)
+		FROM rides WHERE id = $1
+	`, rideID).Scan(&maxPassengers, &currentPassengers)
+
+	if err != nil {
+		return fmt.Errorf("ride not found or db error: %v", err)
+	}
+
+	if currentPassengers >= maxPassengers {
+		return fmt.Errorf("ride is full")
+	}
+
+	// 2. 寫入關聯表 (使用 ON CONFLICT 避免重複加入報錯)
+	_, err = DB.Exec(`
+		INSERT INTO ride_participants (ride_id, passenger_id)
+		VALUES ($1, $2)
+		ON CONFLICT (ride_id, passenger_id) DO NOTHING
+	`, rideID, passengerID)
+
+	return err
 }
