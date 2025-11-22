@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,70 +11,77 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	_ "github.com/lib/pq"
 )
 
-// 定義 JWT 的密鑰 (正式環境應該從環境變數讀取)
-var jwtKey = []byte("my_secret_key_12345")
+// 全域變數
+var db *sql.DB
+var jwtKey []byte // 改成動態讀取
 
 // 定義 JWT 內容結構
 type Claims struct {
 	UserID string `json:"userId"`
 	Email  string `json:"email"`
 	Name   string `json:"name"`
+	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-// // 定義前端傳過來的資料結構, 這是從google那邊得到的原始的認證字串沒有解密過
-//
-//	type LoginRequest struct {
-//		IDToken string `json:"idToken"`
-//	}
 type LoginRequest struct {
 	AccessToken string `json:"accessToken"`
 }
 
-// 2. Google UserInfo API 回傳的結構
 type GoogleUserInfo struct {
-	Sub           string `json:"sub"` // Google ID
-	Name          string `json:"name"`
-	GivenName     string `json:"given_name"`
-	FamilyName    string `json:"family_name"`
-	Picture       string `json:"picture"`
-	Email         string `json:"email"`
-	EmailVerified bool   `json:"email_verified"`
+	Sub     string `json:"sub"`
+	Name    string `json:"name"`
+	Picture string `json:"picture"`
+	Email   string `json:"email"`
 }
+
 type LoginResponse struct {
 	Message string `json:"message"`
 	UserID  string `json:"userId"`
 	Email   string `json:"email"`
 	Name    string `json:"name"`
 	Picture string `json:"picture"`
-	Token   string `json:"token"` // 後端發的通行證
+	Token   string `json:"token"`
+	Role    string `json:"role"`
 }
 
-func enableCORS(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// 允許前端 localhost:5173 呼叫
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+func initDB() {
+	// 從環境變數讀取密碼
+	pgPwd := os.Getenv("POSTGRES_PASSWORD")
+	if pgPwd == "" {
+		pgPwd = "password"
+	} // 本地預設
 
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next(w, r)
+	connStr := fmt.Sprintf("host=postgres port=5432 user=user password=%s dbname=chat_db sslmode=disable", pgPwd)
+	var err error
+	db, err = sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal("Failed to connect to DB:", err)
 	}
+	// 建立 Users 表
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS users (
+		id TEXT PRIMARY KEY,
+		email TEXT NOT NULL,
+		name TEXT,
+		picture TEXT,
+		role TEXT DEFAULT 'passenger'
+	)`)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Auth Service connected to DB.")
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
-	googleClientID := os.Getenv("GOOGLE_CLIENT_ID") // 這是你的 Google Client ID (跟前端那個一樣)
+	googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
 	if googleClientID == "" {
-		log.Println("Error: GOOGLE_CLIENT_ID is not set")
-		http.Error(w, "Server configuration error", http.StatusInternalServerError) // 之後可刪除
-		return
+		log.Println("Warning: GOOGLE_CLIENT_ID is not set")
 	}
-	if r.Method == http.MethodOptions { // 遇到有人要preflight, 先跟他說沒問題
+
+	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -89,31 +97,20 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 2. 呼叫 Google API
 	googleAPIUrl := "https://www.googleapis.com/oauth2/v3/userinfo"
-
-	// 建立一個請求
 	request, _ := http.NewRequest("GET", googleAPIUrl, nil)
-	// 把前端給的 Access Token 放在 Header 裡
 	request.Header.Set("Authorization", "Bearer "+req.AccessToken)
 
-	// 發送請求
 	client := &http.Client{}
 	googleResp, err := client.Do(request)
-	if err != nil {
-		log.Printf("Failed to call Google API: %v", err)
-		http.Error(w, "Failed to verify token", http.StatusInternalServerError)
+	if err != nil || googleResp.StatusCode != http.StatusOK {
+		log.Printf("Failed to verify Google Token: %v", err)
+		http.Error(w, "Failed to verify token", http.StatusUnauthorized)
 		return
 	}
 	defer googleResp.Body.Close()
 
-	// 檢查 Google 回應狀態
-	if googleResp.StatusCode != http.StatusOK {
-		log.Printf("Google API returned status: %d", googleResp.StatusCode)
-		http.Error(w, "Invalid Google Token", http.StatusUnauthorized)
-		return
-	}
-
-	// 解析 Google 回傳的 User Info
 	var userInfo GoogleUserInfo
 	body, _ := io.ReadAll(googleResp.Body)
 	if err := json.Unmarshal(body, &userInfo); err != nil {
@@ -122,12 +119,33 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. 驗證成功！發放我們自己的 JWT
+	// ==========================================
+	// 3. [補上遺失的邏輯] 同步到資料庫 (Upsert)
+	// ==========================================
+	var role string
+	// 這段 SQL 會確保資料寫入，並回傳最新的 role
+	err = db.QueryRow(`
+		INSERT INTO users (id, email, name, picture)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (id) DO UPDATE 
+		SET name = EXCLUDED.name, picture = EXCLUDED.picture, email = EXCLUDED.email
+		RETURNING role
+	`, userInfo.Sub, userInfo.Email, userInfo.Name, userInfo.Picture).Scan(&role)
+
+	if err != nil {
+		log.Printf("DB Sync Error: %v", err)
+		http.Error(w, "Database Error", http.StatusInternalServerError)
+		return
+	}
+	// ==========================================
+
+	// 4. 發放 JWT
 	expirationTime := time.Now().Add(7 * 24 * time.Hour)
 	claims := &Claims{
 		UserID: userInfo.Sub,
 		Email:  userInfo.Email,
 		Name:   userInfo.Name,
+		Role:   role, // 使用從 DB 拿出來的 role
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 		},
@@ -139,7 +157,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("User logged in: %s (%s)", userInfo.Email, userInfo.Sub)
+	log.Printf("User logged in & saved to DB: %s (%s) Role: %s", userInfo.Email, userInfo.Sub, role)
 
 	resp := LoginResponse{
 		Message: "Login Successful",
@@ -147,7 +165,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		UserID:  userInfo.Sub,
 		Email:   userInfo.Email,
 		Name:    userInfo.Name,
-		Picture: userInfo.Picture, // 這裡會回傳 Google 高清圖
+		Picture: userInfo.Picture,
+		Role:    role,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -155,7 +174,25 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/auth/login", loginHandler)
+	// 讀取環境變數中的 JWT_SECRET
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		jwtKey = []byte("my_secret_key_12345") // 本地 fallback
+	} else {
+		jwtKey = []byte(secret)
+	}
+
+	initDB()
+
+	http.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.Method == "POST" {
+			loginHandler(w, r)
+		}
+	})
 
 	fmt.Println("Auth Service running on :8081")
 	http.ListenAndServe(":8081", nil)
