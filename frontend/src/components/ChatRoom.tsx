@@ -1,95 +1,71 @@
-// frontend/src/components/ChatRoom.tsx
-import { useState, useEffect, useRef } from "react";
-import { useChat } from "../hooks/useChat";
+import { useState, useEffect, useRef } from 'react';
+import { useChat } from '../hooks/useChat';
 
 interface ChatRoomProps {
   roomId: string;
   roomName: string;
   username: string;
-  onClose: () => void; // 改名：從 onLeave 變成 onClose 比較直觀
+  userId: string; // 新增
+  onClose: () => void;
 }
 
-export const ChatRoom = ({
-  roomId,
-  roomName,
-  username,
-  onClose,
-}: ChatRoomProps) => {
-  const { messages, sendMessage, isConnected } = useChat(roomId, username);
-  const [input, setInput] = useState("");
+export const ChatRoom = ({ roomId, roomName, username, userId, onClose }: ChatRoomProps) => {
+  const { messages, sendMessage, isConnected } = useChat(roomId, username, userId);
+  const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSend = () => {
     if (!input.trim()) return;
     sendMessage(input);
-    setInput("");
+    setInput('');
   };
 
   return (
-    // 修改這裡：變成固定在右下角的彈出視窗
-    <div className="fixed bottom-4 right-4 w-80 h-96 bg-white rounded-t-lg shadow-2xl flex flex-col border border-gray-300 z-50">
+    <div className="fixed bottom-4 right-4 w-96 h-[500px] bg-white rounded-t-xl shadow-2xl flex flex-col border border-gray-300 z-50 font-sans">
       {/* Header */}
-      <div
-        className="bg-blue-600 text-white p-3 rounded-t-lg flex justify-between items-center cursor-pointer"
-        onClick={onClose}
-      >
-        <div className="flex items-center gap-2">
-          <div
-            className={`w-2 h-2 rounded-full ${
-              isConnected ? "bg-green-400" : "bg-red-400"
-            }`}
-          ></div>
-          <span className="font-bold truncate w-40">{roomName}</span>
+      <div className="bg-blue-600 text-white p-4 rounded-t-xl flex justify-between items-center shadow-md cursor-pointer" onClick={onClose}>
+        <div className="flex items-center gap-2 overflow-hidden">
+          <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'} shadow-sm`}></div>
+          <span className="font-bold truncate text-lg">{roomName}</span>
         </div>
-        {/* 關閉按鈕 (X) */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }} // 防止觸發 Header 點擊
-          className="text-white hover:text-gray-200 font-bold"
-        >
-          ✕
-        </button>
+        <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="text-white/80 hover:text-white font-bold text-xl px-2">✕</button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 bg-gray-50 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 bg-gray-50 space-y-4">
         {messages.map((msg, index) => {
-          const isMe = msg.username === username;
+          const isMe = msg.senderId === userId || msg.username === username;
           return (
-            <div
-              key={index}
-              className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
-            >
-              {/* 名字 (如果是對方才顯示) */}
-              {!isMe && (
-                <span className="text-xs text-gray-500 ml-1 mb-0.5">
-                  {msg.username}
-                </span>
-              )}
+            <div key={index} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+              {/* 頭貼 */}
+              <div className="shrink-0">
+                {msg.senderPicture ? (
+                  <img src={msg.senderPicture} className="w-8 h-8 rounded-full border border-gray-200" alt={msg.username} />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-xs text-white">
+                    {msg.username[0]}
+                  </div>
+                )}
+              </div>
 
-              <div
-                className={`max-w-[85%] rounded-lg px-3 py-2 text-sm shadow-sm wrap-break-word relative group ${
-                  isMe
-                    ? "bg-blue-500 text-white rounded-br-none"
-                    : "bg-white text-gray-800 rounded-bl-none border border-gray-200"
-                }`}
-              >
-                {msg.content}
-
-                {/* 時間戳記：顯示在氣泡旁邊或裡面 */}
-                <div
-                  className={`text-[10px] mt-1 text-right ${
-                    isMe ? "text-blue-100" : "text-gray-400"
-                  }`}
-                >
-                  {msg.timestamp}
+              <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[70%]`}>
+                {/* 名字 */}
+                {!isMe && <span className="text-xs text-gray-500 ml-1 mb-1">{msg.username}</span>}
+                
+                {/* 氣泡 */}
+                <div className={`px-4 py-2 text-sm rounded-2xl shadow-sm wrap-break-word relative group ${
+                  isMe 
+                    ? 'bg-blue-500 text-white rounded-tr-none' 
+                    : 'bg-white text-gray-800 rounded-tl-none border border-gray-200'
+                }`}>
+                  {msg.content}
                 </div>
+                {/* 時間 */}
+                <span className="text-[10px] text-gray-400 mt-1 mx-1">{msg.timestamp}</span>
               </div>
             </div>
           );
@@ -98,21 +74,21 @@ export const ChatRoom = ({
       </div>
 
       {/* Input */}
-      <div className="p-2 bg-white border-t">
-        <div className="flex gap-1">
+      <div className="p-3 bg-white border-t border-gray-100">
+        <div className="flex gap-2 bg-gray-100 rounded-full p-1 pr-2">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="輸入訊息..."
-            className="flex-1 border border-gray-300 rounded-full px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            placeholder="傳送訊息..."
+            className="flex-1 bg-transparent px-4 py-2 text-sm focus:outline-none"
             autoFocus
           />
           <button
             onClick={handleSend}
             disabled={!isConnected}
-            className="bg-blue-600 text-white rounded-full w-10 h-8 flex items-center justify-center hover:bg-blue-700 disabled:bg-gray-400"
+            className="bg-blue-600 text-white rounded-full w-9 h-9 flex items-center justify-center hover:bg-blue-700 disabled:bg-gray-400 transition shadow-sm"
           >
             ➤
           </button>
