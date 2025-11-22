@@ -3,41 +3,36 @@
 load('ext://restart_process', 'docker_build_with_restart')
 
 # ==========================================
-# 1. 載入所有的 K8s YAML
+# 1. 載入基礎設施 (Nginx, DB)
 # ==========================================
-# 把所有需要的 yaml 都在這裡一次載入，這是最不容易出錯的寫法
 k8s_yaml([
-    # 基礎設施
-    'deploy/k8s/nginx-ingress-install.yaml', # <--- 改成讀取本地檔案！
+    'deploy/k8s/secret.yaml',
+    'deploy/k8s/nginx-ingress-install.yaml', # 確保你已經刪除了 Webhook/Job
+    'deploy/k8s/ingress.yaml',
     'deploy/k8s/configmap.yaml',
     'deploy/k8s/postgres.yaml',
     'deploy/k8s/redis.yaml',
-    'deploy/k8s/ingress.yaml',
-    
-    # 微服務
-    'deploy/k8s/auth.yaml',
-    'deploy/k8s/chat.yaml',
-    'deploy/k8s/frontend.yaml', # 確保這裡有載入
 ])
 
-# ==========================================
-# 2. 設定基礎設施資源 (Port Forwarding & Labels)
-# ==========================================
-
-# API Gateway (Nginx)
+# 設定 API Gateway 資源
 k8s_resource('ingress-nginx-controller', 
     port_forwards='8000:80',
     new_name='api-gateway', 
     labels=['infra'],
+    # 這裡不用設 objects，讓 Tilt 自動抓
 )
 
-# 資料庫
 k8s_resource('postgres', labels=['db'])
 k8s_resource('redis', labels=['db'])
 
 # ==========================================
-# 3. 設定微服務 (Build & Live Update)
+# 2. 載入微服務 (Services)
 # ==========================================
+k8s_yaml([
+    'deploy/k8s/auth.yaml',
+    'deploy/k8s/chat.yaml',
+    'deploy/k8s/frontend.yaml',
+])
 
 # Auth Service
 docker_build_with_restart(

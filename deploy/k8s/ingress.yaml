@@ -7,6 +7,7 @@ metadata:
     nginx.ingress.kubernetes.io/enable-cors: "true"
     nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS"
     nginx.ingress.kubernetes.io/cors-allow-origin: "http://localhost:5173"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
     nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
     # WebSocket 設定
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
@@ -36,10 +37,12 @@ spec:
               number: 8080
               
       # 3. Chat Service (API)
-      - path: /api
+      - path: /api/rides
         pathType: Prefix
         backend:
           service:
             name: chat-service
             port:
               number: 8080
+# 資源 (Resources) 走 /api/xxx：例如 rides, users, orders。這是 RESTful 的標準
+# 功能 (Functions) 走特定路徑：例如 /auth (登入), /ws (連線)
