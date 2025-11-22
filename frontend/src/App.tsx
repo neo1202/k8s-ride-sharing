@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
+import { useGoogleLogin } from "@react-oauth/google";
+// import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import "./App.css";
 
 // 引入你的 ChatRoom 元件
@@ -29,20 +30,15 @@ const PINNED_ROOMS: ChatRoomType[] = [
 
 function App() {
   const API_URL = import.meta.env.VITE_API_URL;
-
   const [user, setUser] = useState<User | null>(null);
-
-  // --- 2. 使用者建立的房間狀態 ---
-  // 這裡預設是空的，ID 從 1 開始
   const [userRooms, setUserRooms] = useState<ChatRoomType[]>([]);
-
   const [newRoomName, setNewRoomName] = useState("");
   const [currentRoom, setCurrentRoom] = useState<ChatRoomType | null>(null);
   // 1. 初始化：檢查 LocalStorage 登入狀態 & 撈房間
   useEffect(() => {
-    const token = localStorage.getItem('chat_token');
+    const token = localStorage.getItem("chat_token");
     fetch(`${API_URL}/api/rooms`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then((res) => res.json())
       .then((data) => {
@@ -57,81 +53,86 @@ function App() {
       setUser(JSON.parse(storedUser));
     }
   }, [API_URL]);
-  // 登入邏輯 (保持不變)
-  const handleLoginSuccess = async (credentialResponse: CredentialResponse) => {
-    if (!credentialResponse.credential) return;
-    const googleToken = credentialResponse.credential;
+  const login = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      console.log("Google Access Token:", tokenResponse.access_token);
 
-    try {
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken: googleToken }),
-      });
+      try {
+        // 我們把 Access Token 丟給後端
+        // 後端會拿這個 Token 去跟 Google 換取 User Profile
+        const response = await fetch(`${API_URL}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accessToken: tokenResponse.access_token, // 注意：這裡改名了
+          }),
+        });
 
-      if (!response.ok) throw new Error("Backend validation failed");
+        if (!response.ok) throw new Error("Backend validation failed");
 
-      const data = await response.json();
-      const userPicture = data.picture
-        ? data.picture
-        : `https://ui-avatars.com/api/?name=${encodeURIComponent(
-            data.name
-          )}&background=random`;
+        const data = await response.json();
 
-      const userInfo = {
-        name: data.name,
-        picture: userPicture,
-        email: data.email,
-        userId: data.userId,
-      };
-      setUser(userInfo);
-      localStorage.setItem("chat_token", data.token);
-      localStorage.setItem("chat_user_info", JSON.stringify(userInfo));
-    } catch (error) {
-      console.error("Login failed:", error);
-      alert("登入失敗");
-    }
-  };
+        // 因為改用 Access Token 換資料，Google 幾乎保證會回傳 picture
+        // 但我們還是保留 UI Avatars 當保底
+        const userPicture = data.picture
+          ? data.picture
+          : `https://ui-avatars.com/api/?name=${encodeURIComponent(
+              data.name
+            )}&background=random`;
 
-  const handleLoginError = () => {
-    console.log("Login Failed");
-  };
+        const userInfo = {
+          name: data.name,
+          picture: userPicture,
+          email: data.email,
+          userId: data.userId,
+        };
+
+        setUser(userInfo);
+        localStorage.setItem("chat_token", data.token);
+        localStorage.setItem("chat_user_info", JSON.stringify(userInfo));
+      } catch (error) {
+        console.error("Login failed:", error);
+        alert("登入失敗");
+      }
+    },
+    onError: () => console.log("Login Failed"),
+  });
 
   // --- 3. 建立房間邏輯 (ID 遞增) ---
   const handleCreateRoom = async () => {
     if (!newRoomName.trim()) return;
-    const token = localStorage.getItem('chat_token'); // 從 LocalStorage 拿 Token
+    const token = localStorage.getItem("chat_token"); // 從 LocalStorage 拿 Token
 
     if (!token) {
-        alert("請先登入！");
-        return;
+      alert("請先登入！");
+      return;
     }
 
     const newRoom = {
       id: Date.now().toString(),
       name: newRoomName,
-      isPinned: false
+      isPinned: false,
     };
 
     try {
-        // --- 修改這裡：加入 Authorization Header ---
-        const res = await fetch(`${API_URL}/api/rooms`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}` // <--- 關鍵！帶上通行證
-            },
-            body: JSON.stringify(newRoom)
-        });
-        
-        if (res.ok) {
-            setUserRooms([...userRooms, newRoom]);
-            setNewRoomName("");
-        } else {
-            alert("建立失敗，可能權限不足");
-        }
-    } catch(e) {
-        alert(e);
+      // --- 修改這裡：加入 Authorization Header ---
+      const res = await fetch(`${API_URL}/api/rooms`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`, // <--- 關鍵！帶上通行證
+        },
+        body: JSON.stringify(newRoom),
+      });
+
+      if (res.ok) {
+        setUserRooms([...userRooms, newRoom]);
+        setNewRoomName("");
+      } else {
+        alert("建立失敗，可能權限不足");
+      }
+    } catch (e) {
+      alert(e);
     }
   };
 
@@ -168,10 +169,17 @@ function App() {
         {!user ? (
           <div className="flex flex-col items-center mt-20">
             <h2 className="text-xl mb-6 text-gray-600">請先登入以開始聊天</h2>
-            <GoogleLogin
-              onSuccess={handleLoginSuccess}
-              onError={handleLoginError}
-            />
+            <button
+              onClick={() => login()}
+              className="flex items-center gap-3 bg-white text-gray-700 border border-gray-300 px-6 py-3 rounded-lg font-bold hover:bg-gray-50 hover:shadow transition active:scale-95"
+            >
+              <img
+                src="https://www.svgrepo.com/show/475656/google-color.svg"
+                className="w-6 h-6"
+                alt="Google"
+              />
+              使用 Google 帳號登入
+            </button>
           </div>
         ) : (
           <>
@@ -196,7 +204,7 @@ function App() {
                     <div
                       key={room.id}
                       onClick={() => enterRoom(room)}
-                      className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 p-4 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition hover:-translate-y-1 flex items-center justify-between group"
+                      className="bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-100 p-4 rounded-xl shadow-sm hover:shadow-md cursor-pointer transition hover:-translate-y-1 flex items-center justify-between group"
                     >
                       <span className="font-bold text-blue-800 text-lg">
                         {room.name}
