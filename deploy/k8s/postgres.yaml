@@ -26,13 +26,13 @@ spec:
                   key: POSTGRES_PASSWORD
             - name: POSTGRES_DB
               value: "chat_db"
-          volumeMounts:
-            - name: postgres-storage
-              mountPath: /var/lib/postgresql/data # 將下方的儲存空間掛載到容器內的指定路徑
-      volumes:
-        - name: postgres-storage
-          persistentVolumeClaim:
-            claimName: postgres-pvc  # 持久儲存宣告，跟以下的有關
+      #     volumeMounts:
+      #       - name: postgres-storage
+      #         mountPath: /var/lib/postgresql/data # 將下方的儲存空間掛載到容器內的指定路徑
+      # volumes:
+      #   - name: postgres-storage
+      #     persistentVolumeClaim:
+      #       claimName: postgres-pvc  # 持久儲存宣告，跟以下的有關 暫時放棄持久存儲，以後加aws RDB，AWS難出禮
 ---
 apiVersion: v1
 kind: Service
@@ -44,15 +44,15 @@ spec:
   ports:
     - port: 5432
       targetPort: 5432
----
-# 設定持久化儲存 (PVC)，這樣重啟資料庫資料才不會不見
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: postgres-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
+# ---
+# # 設定持久化儲存 (PVC)，這樣重啟資料庫資料才不會不見
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: postgres-pvc
+# spec:
+#   accessModes:
+#     - ReadWriteOnce
+#   resources:
+#     requests:
+#       storage: 1Gi
