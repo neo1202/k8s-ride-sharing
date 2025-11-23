@@ -24,7 +24,7 @@ metadata:
 spec:
   selector:
     app: frontend
-  type: LoadBalancer # 為了方便也可以設為 ClusterIP，靠 port-forward
+  type: ClusterIP
   ports:
   - port: 5173
     targetPort: 5173
