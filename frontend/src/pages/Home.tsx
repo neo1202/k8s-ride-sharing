@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-// 注意：這裡改成從 hooks 引入
 import { useAuth } from "../context/AuthContext";
 import { type ChatRoomType, type Ride } from "../types";
 
@@ -14,8 +13,6 @@ const PINNED_ROOMS: ChatRoomType[] = [
 export const Home = () => {
   const { user, token, updateRole } = useAuth();
   const [rides, setRides] = useState<Ride[]>([]);
-
-  // 初始化表單，預設 3 人
   const [formData, setFormData] = useState({
     origin: "",
     destination: "",
@@ -218,7 +215,7 @@ export const Home = () => {
             </div>
 
             {/* [新增] 人數設定 */}
-            <div className="w-[80px]">
+            <div className="w-20">
               <label className="text-xs text-gray-500 mb-1 block">人數</label>
               <input
                 type="number"
