@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: frontend-image
+        image: neo1202/frontend-service
         ports:
         - containerPort: 5173
 ---

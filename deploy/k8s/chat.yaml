@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: chat-service
-        image: chat-image  # 對應 Tiltfile 裡的 docker_build 第一個參數
+        image: neo1202/chat-service # 部署用
         ports:
         - containerPort: 8080
         env:

@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name: auth-service
-        image: auth-image # 對應 Tiltfile
+        image: neo1202/auth-service
         ports:
         - containerPort: 8081 # 注意 Auth 用 8081
         env:

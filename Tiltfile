@@ -19,7 +19,6 @@ k8s_resource('ingress-nginx-controller',
     port_forwards='8000:80',
     new_name='api-gateway', 
     labels=['infra'],
-    # 這裡不用設 objects，讓 Tilt 自動抓
 )
 
 k8s_resource('postgres', labels=['db'])
@@ -36,7 +35,7 @@ k8s_yaml([
 
 # Auth Service
 docker_build_with_restart(
-    'auth-image', 'services/auth',
+    'neo1202/auth-service', 'services/auth',
     dockerfile='services/auth/Dockerfile',
     entrypoint=['go', 'run', 'main.go'],
     live_update=[sync('services/auth', '/app')]
@@ -45,7 +44,7 @@ k8s_resource('auth-service', labels=['backend'])
 
 # Chat Service
 docker_build_with_restart(
-    'chat-image', 'services/chat',
+    'neo1202/chat-service', 'services/chat',
     dockerfile='services/chat/Dockerfile',
     entrypoint=['go', 'run', 'main.go'],
     live_update=[sync('services/chat', '/app')]
@@ -53,7 +52,7 @@ docker_build_with_restart(
 k8s_resource('chat-service', labels=['backend'])
 
 # Frontend
-docker_build('frontend-image', 'frontend',
+docker_build('neo1202/frontend-service', 'frontend',
     dockerfile='frontend/Dockerfile',
     live_update=[
         sync('frontend/src', '/app/src'),
