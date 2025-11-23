@@ -27,6 +27,10 @@ function Navbar() {
         if (!response.ok) throw new Error("Login failed");
 
         const data = await response.json();
+        console.log("[Login] Backend Response:", data);
+        if (!data.picture) {
+            console.warn("⚠️ [Login] Backend returned NO PICTURE string!");
+        }
         // 處理頭貼邏輯
         const userPicture = data.picture 
           ? data.picture 
