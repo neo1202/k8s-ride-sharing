@@ -11,7 +11,8 @@ import {
 import { ChatRoom } from "../components/ChatRoom";
 import type { Ride } from "../types";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+// const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 export const MyRides = () => {
   const { token, user } = useAuth();

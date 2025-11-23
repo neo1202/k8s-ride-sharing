@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 export interface ChatMessage {
   username: string;
@@ -17,12 +18,23 @@ export const useChat = (roomId: string, username: string, userId: string) => {
   const socketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    // setMessages([]);
-    // 自動判斷 ws 或 wss
+    // 決定協定：如果是 https 網頁就用 wss (安全)，http 就用 ws
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = API_URL.replace(/^http(s)?:\/\//, '');
-    
-    const ws = new WebSocket(`${protocol}//${host}/ws?roomId=${roomId}`);
+    // 2. 決定主機 (Host)：
+    // 如果有設定 API_URL (環境變數)，就用它去掉 http:// 後的部分。
+    // 如果 API_URL 是空的 (我們現在的策略)，就抓「瀏覽器當前的網址 (window.location.host)」。
+    let host = '';
+    if (API_URL) {
+        host = API_URL.replace(/^http(s)?:\/\//, '');
+    } else {
+        host = window.location.host; 
+        // 在 AWS 上，這會自動變成 "xxxx.elb.amazonaws.com"
+        // 在本地 (透過 Nginx 訪問)，這會變成 "localhost:8000"
+    }
+    const wsUrl = `${protocol}//${host}/ws?roomId=${roomId}`;
+    console.log("Connecting to WebSocket:", wsUrl); // 除錯用，讓你知道它連去哪
+
+    const ws = new WebSocket(wsUrl);
     socketRef.current = ws;
 
     ws.onopen = () => setIsConnected(true);

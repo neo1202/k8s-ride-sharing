@@ -41,6 +41,13 @@ jobs:
 
     # 4. Build & Push Frontend
     - name: Build and Push Frontend
+      # 在這一步，我們把 Secret 寫入 .env 檔案
+      # 這樣 Docker build 的時候，Vite 就能讀到這個變數並打包進去
+      run: |
+        echo "VITE_GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}" > ./frontend/.env
+        echo "VITE_API_URL=" >> ./frontend/.env
+      # 注意：VITE_API_URL 留空，強制使用相對路徑
+    - name: Build and Push Frontend
       uses: docker/build-push-action@v4
       with:
         context: ./frontend

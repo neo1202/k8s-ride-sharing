@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { type ChatRoomType, type Ride } from "../types";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+// const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 const PINNED_ROOMS: ChatRoomType[] = [
   { id: "announcement", name: "📢 公告", isPinned: true },

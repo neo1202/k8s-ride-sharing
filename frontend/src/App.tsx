@@ -7,7 +7,8 @@ import { Home } from './pages/Home';
 import { MyRides } from './pages/MyRides';
 import type { User } from './types'; // 引入 types
 
-const API_URL = import.meta.env.VITE_API_URL;
+// const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 // Navbar 元件：負責顯示登入按鈕、登出、切換頁面連結
 function Navbar() {
