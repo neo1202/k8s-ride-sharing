@@ -1,4 +1,3 @@
-secret.yaml
 # --- Go (Golang) ---
 
 *.exe
@@ -64,3 +63,38 @@ tilt_modules/
 .LSOverride
 Thumbs.db
 desktop.ini
+
+# --- Terraform (基礎設施) ---
+# 本地下載的 Plugin 與模組 (類似 node_modules)
+.terraform/
+
+# 狀態檔 (⚠️ 絕對不能推！包含敏感資訊與當前狀態)
+*.tfstate
+*.tfstate.*
+
+# 崩潰日誌
+crash.log
+crash.*.log
+
+# 變數檔 (通常包含密碼或個人設定)
+*.tfvars
+*.tfvars.json
+
+# 忽略覆寫設定 (本地除錯用)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI 設定檔
+.terraformrc
+terraform.rc
+
+# --- Kubernetes / Helm ---
+# Helm 下載的依賴 (如果以後有用 helm dependency update)
+charts/
+
+# 確保 Secret 絕對不會被推上去 (你原本有寫，這裡再次強調)
+deploy/k8s/secret.yaml
+secrets.yaml
+*.secret.yaml
