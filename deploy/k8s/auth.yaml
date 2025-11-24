@@ -14,7 +14,7 @@ spec:
       containers:
       - name: auth-service
         image: neo1202/auth-service
-        imagePullPolicy: Always 
+        # imagePullPolicy: Always 
         ports:
         - containerPort: 8081 # 注意 Auth 用 8081
         env:
