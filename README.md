@@ -8,22 +8,32 @@ The system follows a microservices architecture pattern running on Kubernetes.
 
 ```mermaid
 graph TD
-    User((User/Browser)) -->|HTTP/WebSocket| LB[AWS Load Balancer / Localhost]
-    LB --> Ingress[Nginx Ingress Controller]
+    User((User/Browser)) -->|HTTP/WebSocket| LB["AWS Load Balancer"]
+    LB --> Ingress["Nginx Ingress Controller"]
     
     subgraph Kubernetes Cluster
-        Ingress -->|/| Frontend[Frontend Service]
-        Ingress -->|/auth| Auth[Auth Service]
-        Ingress -->|/api/rides, /ws| Chat[Chat Service]
+        Ingress -->|/| Frontend["Frontend Service"]
+        Ingress -->|/auth| Auth["Auth Service"]
         
-        Auth --> DB[(PostgreSQL)]
-        Chat --> DB
-        Chat --> Redis[(Redis Stream/PubSub)]
+        subgraph "Chat Service ReplicaSet"
+            Ingress -->|Load Balance| Chat1["Chat Pod 1"]
+            Ingress -->|Load Balance| Chat2["Chat Pod 2"]
+            Ingress -->|Load Balance| Chat3["Chat Pod 3"]
+        end
+        
+        Auth --> DB[("PostgreSQL")]
+        Chat1 --> DB
+        Chat2 --> DB
+        Chat3 --> DB
+        
+        Chat1 <--> Redis[("Redis Stream/PubSub")]
+        Chat2 <--> Redis
+        Chat3 <--> Redis
     end
 
     subgraph "DevOps & Infrastructure"
-        Terraform[Terraform] -->|Provision| EKS[AWS EKS]
-        GitHub[GitHub Actions] -->|CI/CD| EKS
+        Terraform["Terraform (IaC)"] -->|Provision| EKS["AWS EKS"]
+        GitHub["GitHub Actions"] -->|CI/CD| EKS
     end
 ```
 
