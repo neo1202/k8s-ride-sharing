@@ -68,11 +68,14 @@ jobs:
 
     # 5. 部署到 EKS
     # 裡面沒有deploy/k8s/nginx-ingress-install.yaml, 在雲端上我們都直接下載最新的。本地我把webhook, job都註解了才能本地跑
+    
     - name: Deploy to EKS
       run: |
         # 1. 先部署基礎設施 (ConfigMap, DB, Redis)
         # 注意：Secret 還是得你自己手動在電腦上跑一次，GitHub 沒辦法幫你
-        kubectl apply -f deploy/k8s/configmap.yaml
+        # ❌ 刪除這行 (ConfigMap 由 Terraform 管理) (Secret 也是由 Terraform 管理，且 GitHub 根本沒這檔案)
+        # kubectl apply -f deploy/k8s/configmap.yaml
+        
         kubectl apply -f deploy/k8s/postgres.yaml
         kubectl apply -f deploy/k8s/redis.yaml
         

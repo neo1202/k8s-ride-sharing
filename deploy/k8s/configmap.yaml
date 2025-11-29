@@ -1,3 +1,4 @@
+# 本地開發專用，上線時使用tfvars去部署
 apiVersion: v1
 kind: ConfigMap
 metadata:
