@@ -41,6 +41,11 @@ spec:
             configMapKeyRef:
               name: app-config
               key: POSTGRES_USER
+        - name: POSTGRES_SSLMODE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: POSTGRES_SSLMODE
         - name: GOOGLE_CLIENT_ID
           valueFrom:
             configMapKeyRef:
