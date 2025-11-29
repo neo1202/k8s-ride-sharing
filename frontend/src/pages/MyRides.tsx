@@ -7,6 +7,8 @@ import {
   eachDayOfInterval,
   isSameDay,
   parseISO,
+  addMonths, 
+  subMonths
 } from "date-fns";
 import { ChatRoom } from "../components/ChatRoom";
 import type { Ride } from "../types";
@@ -39,27 +41,23 @@ export const MyRides = () => {
   });
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">📅 我的行程表</h2>
+    <div className="max-w-6xl p-6 mx-auto">
+      <h2 className="mb-6 text-2xl font-bold text-gray-800">📅 我的行程表</h2>
 
       {/* 月曆 Header */}
-      <div className="flex justify-between items-center mb-4">
-        <button
-          onClick={() =>
-            setCurrentDate((d) => new Date(d.setMonth(d.getMonth() - 1)))
-          }
-          className="p-2 bg-gray-100 rounded hover:bg-gray-200"
+      <div className="flex items-center justify-between mb-4">
+        <button 
+            onClick={() => setCurrentDate(prev => subMonths(prev, 1))} 
+            className="p-2 bg-gray-100 rounded hover:bg-gray-200"
         >
           ◀
         </button>
         <span className="text-xl font-bold">
           {format(currentDate, "yyyy MMMM")}
         </span>
-        <button
-          onClick={() =>
-            setCurrentDate((d) => new Date(d.setMonth(d.getMonth() + 1)))
-          }
-          className="p-2 bg-gray-100 rounded hover:bg-gray-200"
+        <button 
+            onClick={() => setCurrentDate(prev => addMonths(prev, 1))} 
+            className="p-2 bg-gray-100 rounded hover:bg-gray-200"
         >
           ▶
         </button>
@@ -68,7 +66,7 @@ export const MyRides = () => {
       {/* 月曆 Grid */}
       <div className="grid grid-cols-7 gap-2 mb-10">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-          <div key={d} className="text-center font-bold text-gray-400 py-2">
+          <div key={d} className="py-2 font-bold text-center text-gray-400">
             {d}
           </div>
         ))}
@@ -91,7 +89,7 @@ export const MyRides = () => {
               key={day.toString()}
               className="min-h-[100px] border rounded-lg p-2 bg-white hover:shadow-md transition"
             >
-              <div className="text-right text-sm text-gray-400 mb-1">
+              <div className="mb-1 text-sm text-right text-gray-400">
                 {format(day, "d")}
               </div>
               <div className="space-y-1">
@@ -115,7 +113,7 @@ export const MyRides = () => {
                     </div>
 
                     {/* 第二行：起點 -> 終點 (允許換行) */}
-                    <div className="leading-tight font-medium wrap-break-words">
+                    <div className="font-medium leading-tight wrap-break-words">
                       <span>{ride.origin}</span>
                       <span className="mx-1 text-gray-400">➜</span>
                       <span>{ride.destination}</span>
