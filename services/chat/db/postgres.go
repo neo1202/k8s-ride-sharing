@@ -19,7 +19,7 @@ func Init() {
 		pgPwd = "password"
 	} // 本地開發預設值
 
-	connStr := fmt.Sprintf("host=postgres port=5432 user=user password=%s dbname=chat_db sslmode=disable", pgPwd)
+	connStr := fmt.Sprintf("host=postgres port=5432 user=db_admin password=%s dbname=chat_db sslmode=disable", pgPwd)
 	var err error
 	DB, err = sql.Open("postgres", connStr)
 	if err != nil {

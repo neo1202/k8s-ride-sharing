@@ -27,4 +27,4 @@ db-logs:
 
 # 額外好用指令：進入 DB 下 SQL (除錯用)
 db-shell:
-	kubectl exec -it $$(kubectl get pod -l app=postgres -o jsonpath="{.items[0].metadata.name}") -- psql -U user -d chat_db
+	kubectl exec -it $$(kubectl get pod -l app=postgres -o jsonpath="{.items[0].metadata.name}") -- psql -U db_admin -d chat_db
