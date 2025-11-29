@@ -13,13 +13,27 @@ import (
 var DB *sql.DB
 
 func Init() {
-	// 讀取 K8s Secret 注入的密碼
+	// 如果是本地 Tilt，ConfigMap 會給 "postgres"
+	// 如果是雲端 EKS，Terraform 會給 "xxx.rds.amazonaws.com"
+	pgHost := os.Getenv("POSTGRES_HOST")
+	if pgHost == "" {
+		pgHost = "postgres" // 本地預設值防呆
+	}
+
+	// 2. 讀取 User
+	// 本地可能是 "user"，雲端是 "db_admin"
+	pgUser := os.Getenv("POSTGRES_USER")
+	if pgUser == "" {
+		pgUser = "db_admin"
+	}
+
+	// 3. 讀取 Password
 	pgPwd := os.Getenv("POSTGRES_PASSWORD")
 	if pgPwd == "" {
 		pgPwd = "password"
-	} // 本地開發預設值
+	}
 
-	connStr := fmt.Sprintf("host=postgres port=5432 user=db_admin password=%s dbname=chat_db sslmode=disable", pgPwd)
+	connStr := fmt.Sprintf("host=%s port=5432 user=%s password=%s dbname=chat_db sslmode=disable", pgHost, pgUser, pgPwd)
 	var err error
 	DB, err = sql.Open("postgres", connStr)
 	if err != nil {

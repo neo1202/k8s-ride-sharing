@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,11 +10,10 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	_ "github.com/lib/pq"
+	"github.com/neo1202/k8s-ride-sharing/services/auth/db"
 )
 
 // 全域變數
-var db *sql.DB
 var jwtKey []byte // 改成動態讀取
 
 // 定義 JWT 內容結構
@@ -46,33 +44,6 @@ type LoginResponse struct {
 	Picture string `json:"picture"`
 	Token   string `json:"token"`
 	Role    string `json:"role"`
-}
-
-func initDB() {
-	// 從環境變數讀取密碼
-	pgPwd := os.Getenv("POSTGRES_PASSWORD")
-	if pgPwd == "" {
-		pgPwd = "password"
-	} // 本地預設
-
-	connStr := fmt.Sprintf("host=postgres port=5432 user=db_admin password=%s dbname=chat_db sslmode=disable", pgPwd)
-	var err error
-	db, err = sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatal("Failed to connect to DB:", err)
-	}
-	// 建立 Users 表
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS users (
-		id TEXT PRIMARY KEY,
-		email TEXT NOT NULL,
-		name TEXT,
-		picture TEXT,
-		role TEXT DEFAULT 'passenger'
-	)`)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("Auth Service connected to DB.")
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -119,18 +90,12 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ==========================================
-	// 3. [補上遺失的邏輯] 同步到資料庫 (Upsert)
-	// ==========================================
-	var role string
-	// 這段 SQL 會確保資料寫入，並回傳最新的 role
-	err = db.QueryRow(`
-		INSERT INTO users (id, email, name, picture)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (id) DO UPDATE 
-		SET name = EXCLUDED.name, picture = EXCLUDED.picture, email = EXCLUDED.email
-		RETURNING role
-	`, userInfo.Sub, userInfo.Email, userInfo.Name, userInfo.Picture).Scan(&role)
+	role, err := db.UpsertUser(db.User{
+		ID:      userInfo.Sub,
+		Email:   userInfo.Email,
+		Name:    userInfo.Name,
+		Picture: userInfo.Picture,
+	})
 
 	if err != nil {
 		log.Printf("DB Sync Error: %v", err)
@@ -182,7 +147,7 @@ func main() {
 		jwtKey = []byte(secret)
 	}
 
-	initDB()
+	db.Init()
 
 	http.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {

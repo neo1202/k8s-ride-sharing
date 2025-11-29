@@ -163,6 +163,7 @@ resource "kubernetes_config_map" "app_config" {
   }
   data = {
     POSTGRES_HOST    = module.db.db_instance_address
+    POSTGRES_USER    = "db_admin"
     GOOGLE_CLIENT_ID = "189871282006-gml6na5q64t9hb35echhcpiu7k3qco4d.apps.googleusercontent.com"
     APP_ENV          = "production"
   }
@@ -197,6 +198,23 @@ resource "helm_release" "nginx_ingress" {
   }
   
   # 確保 EKS 節點都準備好再安裝，避免報錯
+  depends_on = [module.eks]
+}
+# ==========================================
+# 8. 安裝 Reloader (自動重啟 Pod 工具)
+# ==========================================
+resource "helm_release" "reloader" {
+  name       = "reloader"
+  repository = "https://stakater.github.io/stakater-charts"
+  chart      = "reloader"
+  namespace  = "kube-system" # 把它裝在系統層級比較乾淨
+  create_namespace = true
+
+  set {
+    name  = "reloader.watchGlobally"
+    value = "false" # 我們只讓它監控有標記的 Deployment，比較省資源
+  }
+
   depends_on = [module.eks]
 }
 
