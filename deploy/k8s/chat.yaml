@@ -2,6 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: chat-service
+  annotations:
+    # 🔥 [加入這行] 告訴 Reloader：只要 configmap 或 secret 變了，就重啟我
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 3
   selector:
@@ -28,6 +31,16 @@ spec:
             secretKeyRef:
               name: app-secret
               key: POSTGRES_PASSWORD
+        - name: POSTGRES_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: POSTGRES_HOST
+        - name: POSTGRES_USER
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: POSTGRES_USER
 ---
 apiVersion: v1
 kind: Service

@@ -75,8 +75,9 @@ jobs:
         # 注意：Secret 還是得你自己手動在電腦上跑一次，GitHub 沒辦法幫你
         # ❌ 刪除這行 (ConfigMap 由 Terraform 管理) (Secret 也是由 Terraform 管理，且 GitHub 根本沒這檔案)
         # kubectl apply -f deploy/k8s/configmap.yaml
+        # ❌ 已經改用雲端版本的rds, 不用在eks裡面創一個暫時的pg pod了
+        # kubectl apply -f deploy/k8s/postgres.yaml
         
-        kubectl apply -f deploy/k8s/postgres.yaml
         kubectl apply -f deploy/k8s/redis.yaml
         
         # 2. 再部署應用程式 (原本的)

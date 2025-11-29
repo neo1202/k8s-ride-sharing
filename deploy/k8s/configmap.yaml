@@ -8,3 +8,5 @@ data:
   # 這裡放所有的全域設定
   GOOGLE_CLIENT_ID: "189871282006-gml6na5q64t9hb35echhcpiu7k3qco4d.apps.googleusercontent.com" # 這個被看到沒差，像是銀行id
   APP_ENV: "development"
+  POSTGRES_HOST: "postgres"
+  POSTGRES_USER: "db_admin"
