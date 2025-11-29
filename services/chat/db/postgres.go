@@ -32,8 +32,12 @@ func Init() {
 	if pgPwd == "" {
 		pgPwd = "password"
 	}
-
-	connStr := fmt.Sprintf("host=%s port=5432 user=%s password=%s dbname=chat_db sslmode=disable", pgHost, pgUser, pgPwd)
+	// 4. 讀取 SSL Mode, 雲端要加密才能連線到rds本地則是不要加密
+	pgSSL := os.Getenv("POSTGRES_SSLMODE")
+	if pgSSL == "" {
+		pgSSL = "disable" // 預設為 disable (為了本地開發方便)
+	}
+	connStr := fmt.Sprintf("host=%s port=5432 user=%s password=%s dbname=chat_db sslmode=%s", pgHost, pgUser, pgPwd, pgSSL)
 	var err error
 	DB, err = sql.Open("postgres", connStr)
 	if err != nil {

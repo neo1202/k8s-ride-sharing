@@ -166,6 +166,8 @@ resource "kubernetes_config_map" "app_config" {
     POSTGRES_USER    = "db_admin"
     GOOGLE_CLIENT_ID = "189871282006-gml6na5q64t9hb35echhcpiu7k3qco4d.apps.googleusercontent.com"
     APP_ENV          = "production"
+    # 雲端強制加密
+    POSTGRES_SSLMODE = "require"
   }
   depends_on = [module.eks]
 }
