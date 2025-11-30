@@ -31,6 +31,10 @@ export const useChat = (roomId: string, username: string, userId: string) => {
         // 在 AWS 上，這會自動變成 "xxxx.elb.amazonaws.com"
         // 在本地 (透過 Nginx 訪問)，這會變成 "localhost:8000"
     }
+    // [防呆修正] 確保 host 最後面沒有斜線，避免變成 "domain.com//ws"
+    if (host.endsWith('/')) {
+        host = host.slice(0, -1);
+    }
     const wsUrl = `${protocol}//${host}/ws?roomId=${roomId}`;
     console.log("Connecting to WebSocket:", wsUrl); // 除錯用，讓你知道它連去哪
 

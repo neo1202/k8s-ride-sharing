@@ -13,6 +13,11 @@ metadata:
     # WebSocket 設定
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # 強制 Nginx 使用 HTTP 1.1 (WebSocket 必須)
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    # 確保 Upgrade 標頭被正確傳遞給後端
+    nginx.ingress.kubernetes.io/proxy-set-header-Upgrade: "$http_upgrade"
+    nginx.ingress.kubernetes.io/proxy-set-header-Connection: "upgrade"
 spec:
   ingressClassName: nginx
   rules:
