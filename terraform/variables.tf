@@ -10,3 +10,9 @@ variable "jwt_secret" {
   type        = string
   sensitive   = true
 }
+
+variable "argocd_password" {
+  description = "ArgoCD Admin Password"
+  type        = string
+  sensitive   = true # 這樣 Terraform 在 log 裡面會隱藏它
+}

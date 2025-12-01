@@ -12,6 +12,11 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 2.0"
     }
+    # 加密工具
+    bcrypt = {
+      source  = "viktorradnai/bcrypt"
+      version = "~> 0.1.2"
+    }
   }
 }
 
@@ -313,6 +318,10 @@ resource "helm_release" "reloader" {
 # ==========================================
 # 9. 安裝 ArgoCD (GitOps 工具)
 # ==========================================
+resource "bcrypt_hash" "argocd" {
+  cleartext = var.argocd_password
+}
+
 resource "helm_release" "argocd" {
   name       = "argocd"
   repository = "https://argoproj.github.io/argo-helm"
@@ -322,7 +331,11 @@ resource "helm_release" "argocd" {
   timeout = 300
 
   depends_on = [module.eks]
-
+  # 告訴 ArgoCD 它住在 /argocd
+  set {
+    name  = "server.extraArgs[0]"
+    value = "--rootpath=/argocd"
+  }
   # 設定 insecure mode
   set {
     name  = "server.insecure"
@@ -403,6 +416,10 @@ resource "helm_release" "argocd" {
   set {
     name  = "controller.resources.requests.memory"
     value = "256Mi"
+  }
+  set {
+    name  = "configs.secret.argocdServerAdminPassword"
+    value = bcrypt_hash.argocd.id
   }
 }
 # Outputs

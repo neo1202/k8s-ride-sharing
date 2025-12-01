@@ -23,6 +23,14 @@ spec:
   rules:
     - http:
         paths:
+          # 0. ArgoCD
+          - path: /argocd
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80 # 記得我們在 Terraform 設了 insecure=true，所以內部走 80
           # 1. Auth Service
           # 只要網址是 /auth 開頭，就丟給 auth-service 的 8081 port
           - path: /auth
