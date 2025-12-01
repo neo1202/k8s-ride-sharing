@@ -96,5 +96,8 @@ charts/
 
 # 確保 Secret 絕對不會被推上去 (你原本有寫，這裡再次強調)
 deploy/k8s/secret.yaml
+deploy/local-k8s/secret.yaml
 secrets.yaml
 *.secret.yaml
+**/secret.yaml
+/Users/wuhuayo/Desktop/k8s-ride-sharing/deploy/local-k8s/secret.yaml
