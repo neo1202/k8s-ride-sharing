@@ -7,6 +7,8 @@ metadata:
     reloader.stakater.com/auto: "true"
 spec:
   replicas: 3
+  strategy:
+    type: RollingUpdate # 多機就可以改回 RollingUpdate 了，不用斷線
   selector:
     matchLabels:
       app: chat-service
@@ -15,6 +17,7 @@ spec:
       labels:
         app: chat-service
     spec:
+      # 考慮加入限制affinity來跟k8s說chat pod不要放同一個node
       containers:
       - name: chat-service
         image: neo1202/chat-service # 部署用

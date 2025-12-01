@@ -71,11 +71,12 @@ module "eks" {
 
   eks_managed_node_groups = {
     one = {
-      name           = "node-group-1"
+      name = "node-group-spot-2"
       instance_types = ["t3.medium"]
-      min_size       = 1
-      max_size       = 2
-      desired_size   = 1
+    #   capacity_type  = "SPOT"
+      min_size       = 2
+      max_size       = 3
+      desired_size   = 2
     }
   }
 }
@@ -356,7 +357,10 @@ resource "helm_release" "argocd" {
     name  = "server.insecure"
     value = "true"
   }
-  
+  set {
+    name  = "server.extraArgs"
+    value = "{--insecure,--rootpath=/argocd,--basehref=/argocd}"
+  }
   # 關閉 HA Redis
   set {
     name  = "redis-ha.enabled"
