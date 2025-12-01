@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ride-sharing-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/neo1202/k8s-ride-sharing.git
+    targetRevision: main
+    path: deploy/k8s  # ArgoCD 會監控這個資料夾內的所有 YAML
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+
+  syncPolicy:
+    automated:
+      prune: true    # GitHub 刪除檔案時，K8s 也自動刪除
+      selfHeal: true # 如果有人手動改壞 K8s，ArgoCD 自動修復
+    syncOptions:
+      - CreateNamespace=true

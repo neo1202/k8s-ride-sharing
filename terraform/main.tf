@@ -310,7 +310,101 @@ resource "helm_release" "reloader" {
   }
   depends_on = [module.eks]
 }
+# ==========================================
+# 9. 安裝 ArgoCD (GitOps 工具)
+# ==========================================
+resource "helm_release" "argocd" {
+  name       = "argocd"
+  repository = "https://argoproj.github.io/argo-helm"
+  chart      = "argo-cd"
+  namespace  = "argocd"
+  create_namespace = true
+  timeout = 300
 
+  depends_on = [module.eks]
+
+  # 設定 insecure mode
+  set {
+    name  = "server.insecure"
+    value = "true"
+  }
+  
+  # 關閉 HA Redis
+  set {
+    name  = "redis-ha.enabled"
+    value = "false"
+  }
+  
+  # 關閉所有 persistence
+  set {
+    name  = "redis.persistence.enabled"
+    value = "false"
+  }
+  set {
+    name  = "server.persistence.enabled"
+    value = "false"
+  }
+  set {
+    name  = "repoServer.persistence.enabled"
+    value = "false"
+  }
+  
+  # 減少 replicas
+  set {
+    name  = "controller.replicas"
+    value = "1"
+  }
+  set {
+    name  = "server.replicas"
+    value = "1"
+  }
+  set {
+    name  = "repoServer.replicas"
+    value = "1"
+  }
+  set {
+    name  = "applicationSet.replicas"
+    value = "1"
+  }
+  
+  # 🔥 關閉 Dex (OAuth provider，你可能用不到)
+  set {
+    name  = "dex.enabled"
+    value = "false"
+  }
+  
+  # 🔥 關閉 notifications controller (如果不需要)
+  set {
+    name  = "notifications.enabled"
+    value = "false"
+  }
+  
+  # 🔥 降低資源需求
+  set {
+    name  = "server.resources.requests.cpu"
+    value = "100m"
+  }
+  set {
+    name  = "server.resources.requests.memory"
+    value = "128Mi"
+  }
+  set {
+    name  = "repoServer.resources.requests.cpu"
+    value = "100m"
+  }
+  set {
+    name  = "repoServer.resources.requests.memory"
+    value = "128Mi"
+  }
+  set {
+    name  = "controller.resources.requests.cpu"
+    value = "250m"
+  }
+  set {
+    name  = "controller.resources.requests.memory"
+    value = "256Mi"
+  }
+}
 # Outputs
 output "configure_kubectl" {
   description = "Run this command to configure kubectl"
