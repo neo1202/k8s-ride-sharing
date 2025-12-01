@@ -6,11 +6,11 @@ load('ext://restart_process', 'docker_build_with_restart')
 # 1. 載入基礎設施 (Nginx, DB)
 # ==========================================
 k8s_yaml([
-    'deploy/k8s/secret.yaml',
-    'deploy/k8s/nginx-ingress-install.yaml', # 確保你已經刪除了 Webhook/Job
+    'deploy/local-k8s/secret.yaml',
+    'deploy/local-k8s/nginx-ingress-install.yaml', # 確保你已經刪除了 Webhook/Job
+    'deploy/local-k8s/configmap.yaml',
+    'deploy/local-k8s/postgres.yaml',
     'deploy/k8s/ingress.yaml',
-    'deploy/k8s/configmap.yaml',
-    'deploy/k8s/postgres.yaml',
     'deploy/k8s/redis.yaml',
 ])
 
