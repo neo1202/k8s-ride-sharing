@@ -331,10 +331,14 @@ resource "helm_release" "argocd" {
   timeout = 300
 
   depends_on = [module.eks]
-  # 告訴 ArgoCD 它住在 /argocd
   set {
-    name  = "server.extraArgs[0]"
-    value = "--rootpath=/argocd"
+    name  = "configs.params.server\\.base\\.href"
+    value = "/argocd"
+    }
+
+  set {
+    name  = "configs.params.server\\.rootpath"
+    value = "/argocd"
   }
   # 設定 insecure mode
   set {
