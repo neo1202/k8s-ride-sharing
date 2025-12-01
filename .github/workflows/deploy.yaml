@@ -71,24 +71,28 @@ jobs:
     
     - name: Deploy to EKS
       run: |
+        kubectl apply -f deploy/argocd.yaml
+
         # 1. 先部署基礎設施 (ConfigMap, DB, Redis)
         # 注意：Secret 還是得你自己手動在電腦上跑一次，GitHub 沒辦法幫你
         # ❌ 刪除這行 (ConfigMap 由 Terraform 管理) (Secret 也是由 Terraform 管理，且 GitHub 根本沒這檔案)
         # kubectl apply -f deploy/k8s/configmap.yaml
         # ❌ 已經改用雲端版本的rds, 不用在eks裡面創一個暫時的pg pod了
         # kubectl apply -f deploy/k8s/postgres.yaml
-        
-        kubectl apply -f deploy/k8s/redis.yaml
+
+        # 更新：加入ArgoCD以後把redis, auth, chat, frontend, ingress的yaml交給他處理
+        # 因為 ArgoCD 會監控 GitHub 的 deploy/k8s 資料夾，自動同步
+        # kubectl apply -f deploy/k8s/redis.yaml
         
         # 2. 再部署應用程式 (原本的)
-        kubectl apply -f deploy/k8s/auth.yaml
-        kubectl apply -f deploy/k8s/chat.yaml
-        kubectl apply -f deploy/k8s/frontend.yaml
+        # kubectl apply -f deploy/k8s/auth.yaml
+        # kubectl apply -f deploy/k8s/chat.yaml
+        # kubectl apply -f deploy/k8s/frontend.yaml
         
         # 3. 路由
-        kubectl apply -f deploy/k8s/ingress.yaml
+        # kubectl apply -f deploy/k8s/ingress.yaml
         
-        # 4. 重啟
+        # 4. 強制重啟 Pod (這是為了讓 Pod 重新拉取 :latest 的 Image)
         kubectl rollout restart deployment/auth-service
         kubectl rollout restart deployment/chat-service
         kubectl rollout restart deployment/frontend

@@ -282,7 +282,13 @@ resource "helm_release" "nginx_ingress" {
 # 8. K8s Config & Secret & Reloader
 # ==========================================
 resource "kubernetes_config_map" "app_config" {
-  metadata { name = "app-config" }
+  metadata {
+    name = "app-config"
+    annotations = {
+      # 告訴 ArgoCD：這是我管的，你別刪！
+      "argocd.argoproj.io/sync-options" = "Prune=false"
+    }
+  }
   data = {
     POSTGRES_HOST    = module.db.db_instance_address
     POSTGRES_USER    = "db_admin"
@@ -294,7 +300,12 @@ resource "kubernetes_config_map" "app_config" {
 }
 
 resource "kubernetes_secret" "app_secret" {
-  metadata { name = "app-secret" }
+  metadata {
+    name = "app-secret"
+    annotations = {
+      "argocd.argoproj.io/sync-options" = "Prune=false"
+    }
+  }
   data = {
     POSTGRES_PASSWORD = var.db_password
     JWT_SECRET        = var.jwt_secret
