@@ -6,9 +6,9 @@ import { type ChatRoomType, type Ride } from "../types";
 const API_URL = import.meta.env.VITE_API_URL || '';
 
 const PINNED_ROOMS: ChatRoomType[] = [
-  { id: "announcement", name: "📢 公告", isPinned: true },
-  { id: "general", name: "💬 留言區", isPinned: true },
-  { id: "leaderboard", name: "🏆 積分榜", isPinned: true },
+  { id: "announcement", name: "📢 Announcements", isPinned: true },
+  { id: "general", name: "💬 General Chat", isPinned: true },
+  { id: "leaderboard", name: "🏆 Leaderboard", isPinned: true },
 ];
 
 export const Home = () => {
@@ -43,7 +43,7 @@ export const Home = () => {
       !formData.time ||
       !formData.maxPassengers
     ) {
-      alert("請填寫完整資訊");
+      alert("Please fill in all fields");
       return;
     }
 
@@ -78,7 +78,7 @@ export const Home = () => {
           time: "",
           maxPassengers: 3,
         });
-        alert("發布成功！請至「我的旅程」查看");
+        alert("Ride created successfully! Check 'My Rides'.");
       }
     } catch (e) {
       alert(e);
@@ -86,7 +86,7 @@ export const Home = () => {
   };
 
   const handleJoinRide = async (rideId: string) => {
-    if (!token) return alert("請先登入");
+    if (!token) return alert("Please login first");
 
     try {
       const res = await fetch(`${API_URL}/api/rides/join`, {
@@ -99,44 +99,44 @@ export const Home = () => {
       });
 
       if (res.ok) {
-        alert("加入成功！請至「我的旅程」查看");
+        alert("Joined successfully! Check 'My Rides'.");
         fetchRides(); // 重新撈取列表，這樣人數 (currentPassengers) 才會變
       } else if (res.status === 409) {
-        alert("加入失敗：人數已滿");
+        alert("Join failed: Ride is full");
       } else {
-        alert("加入失敗：請稍後再試");
+        alert("Join failed: Please try again later");
       }
     } catch (e) {
       console.error(e);
-      alert("網路錯誤");
+      alert("Network error");
     }
   };
 
   if (!user) {
     return (
       <div className="flex flex-col items-center justify-center mt-20">
-        <h2 className="text-2xl text-gray-600 mb-4">請先點擊右上角登入</h2>
-        <p className="text-gray-400">登入後即可查看旅程與聊天</p>
+        <h2 className="mb-4 text-2xl text-gray-600">Please Login to Continue</h2>
+        <p className="text-gray-400">Access rides and chat features after login.</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-4 pb-20">
+    <div className="max-w-5xl p-4 pb-20 mx-auto">
       {/* 置頂公告 */}
       <section className="mb-8">
-        <h3 className="text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
-          📌 官方頻道
+        <h3 className="flex items-center gap-2 mb-3 text-lg font-bold text-gray-700">
+          📌 Official Channels
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {PINNED_ROOMS.map((room) => (
             <div
               key={room.id}
               // 這裡如果你也不想讓它在大廳彈出，可以先把 onClick 拿掉，或者導向到專屬頁面
               // onClick={() => alert("請至儀表板查看")}
-              className="bg-linear-to-r from-indigo-50 to-blue-50 border border-indigo-100 p-4 rounded-xl shadow-sm cursor-pointer transition hover:-translate-y-1 flex items-center justify-between group"
+              className="flex items-center justify-between p-4 transition border border-indigo-100 shadow-sm cursor-pointer bg-linear-to-r from-indigo-50 to-blue-50 rounded-xl hover:-translate-y-1 group"
             >
-              <span className="font-bold text-indigo-800 text-lg">
+              <span className="text-lg font-bold text-indigo-800">
                 {room.name}
               </span>
               <span className="text-2xl">✨</span>
@@ -145,11 +145,11 @@ export const Home = () => {
         </div>
       </section>
 
-      <hr className="border-gray-200 my-8" />
+      <hr className="my-8 border-gray-200" />
 
       {/* 角色切換 */}
       <div className="flex justify-center mb-8">
-        <div className="bg-gray-100 p-1 rounded-lg flex gap-2 shadow-inner">
+        <div className="flex gap-2 p-1 bg-gray-100 rounded-lg shadow-inner">
           <button
             onClick={() => updateRole("passenger")}
             className={`px-6 py-2 rounded-md font-medium transition ${
@@ -158,7 +158,7 @@ export const Home = () => {
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            我是乘客
+            I'm a passenger
           </button>
           <button
             onClick={() => updateRole("driver")}
@@ -168,22 +168,22 @@ export const Home = () => {
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            我是司機
+            I'm a driver
           </button>
         </div>
       </div>
 
       {/* 建立表單 (Driver Only) */}
       {user.role === "driver" && (
-        <div className="bg-white p-6 rounded-xl shadow-sm mb-8 border border-green-100 ring-1 ring-green-50">
-          <h2 className="text-lg font-bold mb-4 text-green-800 flex items-center gap-2">
-            🚗 發布新旅程
+        <div className="p-6 mb-8 bg-white border border-green-100 shadow-sm rounded-xl ring-1 ring-green-50">
+          <h2 className="flex items-center gap-2 mb-4 text-lg font-bold text-green-800">
+            🚗 Create New Ride
           </h2>
-          <div className="flex flex-wrap gap-4 items-end">
+          <div className="flex flex-wrap items-end gap-4">
             <div className="flex-1 min-w-[150px]">
-              <label className="text-xs text-gray-500 mb-1 block">起點</label>
+              <label className="block mb-1 text-xs text-gray-500">Origin</label>
               <input
-                className="w-full border border-gray-300 p-2 rounded bg-gray-50"
+                className="w-full p-2 border border-gray-300 rounded bg-gray-50"
                 value={formData.origin}
                 onChange={(e) =>
                   setFormData({ ...formData, origin: e.target.value })
@@ -192,9 +192,9 @@ export const Home = () => {
             </div>
             <span className="pb-3 text-gray-400">➜</span>
             <div className="flex-1 min-w-[150px]">
-              <label className="text-xs text-gray-500 mb-1 block">終點</label>
+              <label className="block mb-1 text-xs text-gray-500">Destination</label>
               <input
-                className="w-full border border-gray-300 p-2 rounded bg-gray-50"
+                className="w-full p-2 border border-gray-300 rounded bg-gray-50"
                 value={formData.destination}
                 onChange={(e) =>
                   setFormData({ ...formData, destination: e.target.value })
@@ -202,12 +202,12 @@ export const Home = () => {
               />
             </div>
             <div className="w-[180px]">
-              <label className="text-xs text-gray-500 mb-1 block">
-                出發時間
+              <label className="block mb-1 text-xs text-gray-500">
+                Departure Time
               </label>
               <input
                 type="datetime-local"
-                className="w-full border border-gray-300 p-2 rounded bg-gray-50"
+                className="w-full p-2 border border-gray-300 rounded bg-gray-50"
                 value={formData.time}
                 onChange={(e) =>
                   setFormData({ ...formData, time: e.target.value })
@@ -217,12 +217,12 @@ export const Home = () => {
 
             {/* [新增] 人數設定 */}
             <div className="w-20">
-              <label className="text-xs text-gray-500 mb-1 block">人數</label>
+              <label className="block mb-1 text-xs text-gray-500">Seats</label>
               <input
                 type="number"
                 min="1"
                 max="8"
-                className="w-full border border-gray-300 p-2 rounded bg-gray-50 text-center"
+                className="w-full p-2 text-center border border-gray-300 rounded bg-gray-50"
                 value={formData.maxPassengers}
                 onChange={(e) =>
                   setFormData({
@@ -237,7 +237,7 @@ export const Home = () => {
               onClick={handleCreateRide}
               className="bg-green-600 text-white px-6 py-2.5 rounded hover:bg-green-700 shadow-md font-bold"
             >
-              發布
+              Publish
             </button>
           </div>
         </div>
@@ -245,8 +245,8 @@ export const Home = () => {
 
       {/* 旅程列表 */}
       <section>
-        <h3 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">
-          🌐 即將出發的旅程{" "}
+        <h3 className="flex items-center gap-2 mb-4 text-lg font-bold text-gray-700">
+          🌐 Available Rides{" "}
           <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full">
             {rides.length}
           </span>
@@ -255,43 +255,43 @@ export const Home = () => {
           {rides.map((ride) => (
             <div
               key={ride.id}
-              className="bg-white p-5 rounded-xl shadow-sm flex justify-between items-center border border-gray-100 hover:border-blue-300 transition group"
+              className="flex items-center justify-between p-5 transition bg-white border border-gray-100 shadow-sm rounded-xl hover:border-blue-300 group"
             >
               <div>
-                <div className="font-bold text-xl text-gray-800 mb-1 flex items-center gap-2">
-                  {ride.origin} <span className="text-gray-300 text-sm">➜</span>{" "}
+                <div className="flex items-center gap-2 mb-1 text-xl font-bold text-gray-800">
+                  {ride.origin} <span className="text-sm text-gray-300">➜</span>{" "}
                   {ride.destination}
                 </div>
-                <div className="text-sm text-gray-500 flex items-center gap-4">
+                <div className="flex items-center gap-4 text-sm text-gray-500">
                   <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-600">
                     🕒 {new Date(ride.departureTime).toLocaleString()}
                   </span>
                   <span>🚗 {ride.driverName}</span>
                   {/* 顯示人數 */}
                   <span className="text-gray-400">
-                    👤 {ride.currentPassengers} / {ride.maxPassengers} 人
+                    👤 {ride.currentPassengers} / {ride.maxPassengers} People
                   </span>
                 </div>
               </div>
 
               {/* 按鈕邏輯修正：不給直接進入聊天室 */}
               {user.role === "driver" && ride.driverId === user.userId ? (
-                <span className="text-sm font-bold text-green-600 bg-green-50 px-4 py-2 rounded-lg border border-green-100">
-                  ✅ 我的旅程
+                <span className="px-4 py-2 text-sm font-bold text-green-600 border border-green-100 rounded-lg bg-green-50">
+                  ✅ My Ride
                 </span>
               ) : (
                 <button
                   onClick={() => handleJoinRide(ride.id)}
-                  className="px-5 py-2 rounded-lg font-bold shadow-sm transition bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100"
+                  className="px-5 py-2 font-bold text-blue-600 transition border border-blue-200 rounded-lg shadow-sm bg-blue-50 hover:bg-blue-100"
                 >
-                  + 加入旅程
+                  + Join
                 </button>
               )}
             </div>
           ))}
           {rides.length === 0 && (
-            <div className="text-center py-10 text-gray-400 border-2 border-dashed rounded-xl">
-              目前沒有旅程，司機快來發布吧！
+            <div className="py-10 text-center text-gray-400 border-2 border-dashed rounded-xl">
+              No rides available yet. Drivers, create one!
             </div>
           )}
         </div>

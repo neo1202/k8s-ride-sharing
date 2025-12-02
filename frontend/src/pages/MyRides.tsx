@@ -42,7 +42,7 @@ export const MyRides = () => {
 
   return (
     <div className="max-w-6xl p-6 mx-auto">
-      <h2 className="mb-6 text-2xl font-bold text-gray-800">📅 我的行程表</h2>
+      <h2 className="mb-6 text-2xl font-bold text-gray-800">📅 My Schedule</h2>
 
       {/* 月曆 Header */}
       <div className="flex items-center justify-between mb-4">

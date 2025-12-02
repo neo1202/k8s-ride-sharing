@@ -56,31 +56,31 @@ function Navbar() {
   });
 
   return (
-    <nav className="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center sticky top-0 z-20 shadow-sm">
+    <nav className="sticky top-0 z-20 flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 shadow-sm">
       <div className="flex items-center gap-8">
-        <div className="text-2xl font-bold text-blue-600 flex items-center gap-2">
+        <div className="flex items-center gap-2 text-2xl font-bold text-blue-600">
             <span>🚖</span> RideShare
         </div>
         {user && (
             <div className="flex gap-2">
-                <Link to="/" className={clsx("px-4 py-2 rounded-full text-sm font-medium transition", location.pathname === '/' ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:text-gray-700")}>大廳</Link>
-                <Link to="/my-rides" className={clsx("px-4 py-2 rounded-full text-sm font-medium transition", location.pathname === '/my-rides' ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:text-gray-700")}>我的旅程</Link>
+                <Link to="/" className={clsx("px-4 py-2 rounded-full text-sm font-medium transition", location.pathname === '/' ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:text-gray-700")}>Lobby</Link>
+                <Link to="/my-rides" className={clsx("px-4 py-2 rounded-full text-sm font-medium transition", location.pathname === '/my-rides' ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:text-gray-700")}>My Rides</Link>
             </div>
         )}
       </div>
       
       {user ? (
         <div className="flex items-center gap-3">
-            <img src={user.picture} className="w-9 h-9 rounded-full border border-gray-200" alt={user.name} />
-            <div className="hidden md:block text-sm text-right">
+            <img src={user.picture} className="border border-gray-200 rounded-full w-9 h-9" alt={user.name} />
+            <div className="hidden text-sm text-right md:block">
               <div className="font-bold text-gray-700">{user.name}</div>
               <div className="text-xs text-gray-400 uppercase">{user.role}</div>
             </div>
-            <button onClick={logout} className="ml-2 text-sm text-red-500 hover:bg-red-50 px-3 py-1 rounded transition">登出</button>
+            <button onClick={logout} className="px-3 py-1 ml-2 text-sm text-red-500 transition rounded hover:bg-red-50">Logout</button>
         </div>
       ) : (
-        <button onClick={() => googleLogin()} className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow">
-          Google 登入
+        <button onClick={() => googleLogin()} className="px-5 py-2 text-sm font-bold text-white transition bg-blue-600 rounded-lg shadow hover:bg-blue-700">
+          Login with Google
         </button>
       )}
     </nav>
